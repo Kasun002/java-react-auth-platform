@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.shop.auth.dto.LoginRequestDto;
+import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResponseDto;
 import com.shop.auth.service.AuthService;
@@ -58,5 +60,34 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // Add remaining API
+    @Operation(
+        summary = "Login",
+        description = "Authenticates user credentials and returns JWT access + refresh tokens."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Login successful",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Validation failed — check the errors field",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "401", description = "Invalid email or password",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "403", description = "Account is not active",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/login")
+    public ResponseEntity<ResponseDto<LoginResponseDto>> login(@Valid @RequestBody LoginRequestDto request) {
+        log.info("Login request received for username/email=[{}]",
+                MaskingUtil.maskEmail(request.getUsername()));
+
+        LoginResponseDto loginResponse = authService.login(request);
+
+        ResponseDto<LoginResponseDto> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("Login successful");
+        response.setData(loginResponse);
+
+        log.info("Login completed successfully for username/email=[{}]",
+                MaskingUtil.maskEmail(request.getUsername()));
+        return ResponseEntity.ok(response);
+    }
 }
