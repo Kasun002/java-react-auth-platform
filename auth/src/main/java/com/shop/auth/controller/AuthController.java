@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
+import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.ResponseDto;
+import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.utils.MaskingUtil;
 
@@ -54,7 +56,7 @@ public class AuthController {
 
         ResponseDto<Void> response = new ResponseDto<>();
         response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setMessage("User registered successfully");
+        response.setMessage("Registration successful. An OTP has been sent to your email.");
 
         log.info("Register completed successfully for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -88,6 +90,54 @@ public class AuthController {
 
         log.info("Login completed successfully for username/email=[{}]",
                 MaskingUtil.maskEmail(request.getUsername()));
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Verify OTP",
+        description = "Validates the 6-digit OTP sent after registration. Activates the account on success."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Account verified and activated",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid OTP, expired OTP, or validation error",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "429", description = "Maximum OTP attempts exceeded",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/verify-otp")
+    public ResponseEntity<ResponseDto<Void>> verifyOtp(@Valid @RequestBody VerifyOtpRequestDto request) {
+        log.info("OTP verify request for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
+
+        authService.verifyOtp(request);
+
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("Account verified successfully. You can now log in.");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Resend OTP",
+        description = "Issues a fresh 6-digit OTP to the registered email. Rate-limited to 3 requests per hour."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "OTP resent successfully",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid email or account not in a verifiable state",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "429", description = "Resend rate limit exceeded",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/resend-otp")
+    public ResponseEntity<ResponseDto<Void>> resendOtp(@Valid @RequestBody ResendOtpRequestDto request) {
+        log.info("OTP resend request for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
+
+        authService.resendOtp(request);
+
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("OTP resent successfully. Please check your email.");
         return ResponseEntity.ok(response);
     }
 }

@@ -7,7 +7,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
+import com.shop.auth.dto.ResendOtpRequestDto;
+import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.exception.EmailAlreadyExistsException;
+import com.shop.auth.exception.OtpExpiredException;
+import com.shop.auth.exception.OtpInvalidException;
+import com.shop.auth.exception.OtpMaxAttemptsException;
+import com.shop.auth.exception.OtpResendLimitException;
 import com.shop.auth.exception.AccountLockedException;
 import com.shop.auth.exception.InvalidCredentialsException;
 import com.shop.auth.exception.UserNotActiveException;
@@ -81,7 +87,7 @@ class AuthControllerTest {
                     .content(objectMapper.writeValueAsString(RegisterRequestDtoFixture.valid())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
-                .andExpect(jsonPath("$.message").value("User registered successfully"))
+                .andExpect(jsonPath("$.message").value("Registration successful. An OTP has been sent to your email."))
                 .andExpect(jsonPath("$.errors").doesNotExist());
         }
 
@@ -355,6 +361,141 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value("FAIL"))
                 .andExpect(jsonPath("$.message", containsString("locked")));
+        }
+    }
+
+    // ── POST /auth/verify-otp ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /auth/verify-otp")
+    class VerifyOtp {
+
+        private static final String VERIFY_URL = "/auth/verify-otp";
+
+        private VerifyOtpRequestDto validRequest() {
+            VerifyOtpRequestDto dto = new VerifyOtpRequestDto();
+            dto.setEmail("john.doe@example.com");
+            dto.setOtp("482910");
+            return dto;
+        }
+
+        @Test
+        @DisplayName("Should return 200 OK with success message on valid OTP")
+        void shouldReturn200OnValidOtp() throws Exception {
+            doNothing().when(authService).verifyOtp(any());
+
+            mockMvc.perform(post(VERIFY_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("Account verified successfully. You can now log in."));
+        }
+
+        @Test
+        @DisplayName("Should return 400 when OTP format is invalid — not 6 digits")
+        void shouldReturn400ForMalformedOtp() throws Exception {
+            VerifyOtpRequestDto dto = validRequest();
+            dto.setOtp("12AB");
+
+            mockMvc.perform(post(VERIFY_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*]", hasItem(containsString("otp"))));
+
+            verify(authService, never()).verifyOtp(any());
+        }
+
+        @Test
+        @DisplayName("Should return 400 for invalid OTP value")
+        void shouldReturn400OnInvalidOtp() throws Exception {
+            doThrow(new OtpInvalidException()).when(authService).verifyOtp(any());
+
+            mockMvc.perform(post(VERIFY_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("FAIL"));
+        }
+
+        @Test
+        @DisplayName("Should return 400 for expired OTP")
+        void shouldReturn400OnExpiredOtp() throws Exception {
+            doThrow(new OtpExpiredException()).when(authService).verifyOtp(any());
+
+            mockMvc.perform(post(VERIFY_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("FAIL"));
+        }
+
+        @Test
+        @DisplayName("Should return 429 when max attempts are exceeded")
+        void shouldReturn429OnMaxAttempts() throws Exception {
+            doThrow(new OtpMaxAttemptsException()).when(authService).verifyOtp(any());
+
+            mockMvc.perform(post(VERIFY_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value("FAIL"));
+        }
+    }
+
+    // ── POST /auth/resend-otp ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /auth/resend-otp")
+    class ResendOtp {
+
+        private static final String RESEND_URL = "/auth/resend-otp";
+
+        private ResendOtpRequestDto validRequest() {
+            ResendOtpRequestDto dto = new ResendOtpRequestDto();
+            dto.setEmail("john.doe@example.com");
+            return dto;
+        }
+
+        @Test
+        @DisplayName("Should return 200 OK on successful resend")
+        void shouldReturn200OnResend() throws Exception {
+            doNothing().when(authService).resendOtp(any());
+
+            mockMvc.perform(post(RESEND_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("OTP resent successfully. Please check your email."));
+        }
+
+        @Test
+        @DisplayName("Should return 400 when email format is invalid")
+        void shouldReturn400ForInvalidEmail() throws Exception {
+            ResendOtpRequestDto dto = validRequest();
+            dto.setEmail("not-an-email");
+
+            mockMvc.perform(post(RESEND_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*]", hasItem(containsString("email"))));
+
+            verify(authService, never()).resendOtp(any());
+        }
+
+        @Test
+        @DisplayName("Should return 429 when resend rate limit is hit")
+        void shouldReturn429OnResendLimit() throws Exception {
+            doThrow(new OtpResendLimitException()).when(authService).resendOtp(any());
+
+            mockMvc.perform(post(RESEND_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value("FAIL"));
         }
     }
 }

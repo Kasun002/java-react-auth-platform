@@ -9,6 +9,7 @@ import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.fixtures.AddressDtoFixture;
 import com.shop.auth.fixtures.RegisterRequestDtoFixture;
 import com.shop.auth.repository.UserRepository;
+import com.shop.auth.service.OtpService;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +43,7 @@ class AuthServiceImplTest {
 
     @Mock private UserRepository  userRepository;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private OtpService      otpService;        // void mock — silently does nothing, no stub needed
     @InjectMocks private AuthServiceImpl authService;
 
     // ── Helper ──────────────────────────────────────────────────────────────

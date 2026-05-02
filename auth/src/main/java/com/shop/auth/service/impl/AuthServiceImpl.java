@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
+import com.shop.auth.dto.ResendOtpRequestDto;
+import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.entity.Address;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserLog;
@@ -27,6 +29,7 @@ import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.service.JwtService;
+import com.shop.auth.service.OtpService;
 import com.shop.auth.utils.MaskingUtil;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
@@ -55,6 +58,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserLogRepository userLogRepository;
     private final PasswordEncoder   passwordEncoder;
     private final JwtService        jwtService;
+    private final OtpService        otpService;
 
     // ── Register ─────────────────────────────────────────────────────────────
 
@@ -98,6 +102,14 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         log.info("User persisted successfully — email=[{}] status=[{}] role=[{}]",
                 MaskingUtil.maskEmail(user.getEmail()), user.getStatus(), user.getRole());
+
+        // OTP runs in REQUIRES_NEW — failure does not roll back the committed user record
+        try {
+            otpService.generateAndSend(user);
+        } catch (Exception e) {
+            log.error("OTP send failed for email=[{}]. User registered; must use /auth/resend-otp.",
+                    MaskingUtil.maskEmail(user.getEmail()), e);
+        }
     }
 
     // ── Login ─────────────────────────────────────────────────────────────────
@@ -163,6 +175,20 @@ public class AuthServiceImpl implements AuthService {
         response.setRefreshToken(refreshToken);
         response.setName(user.getName());
         return response;
+    }
+
+    // ── OTP verification ──────────────────────────────────────────────────────
+
+    @Override
+    public void verifyOtp(VerifyOtpRequestDto request) {
+        log.debug("OTP verification delegated for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
+        otpService.verify(request.getEmail(), request.getOtp());
+    }
+
+    @Override
+    public void resendOtp(ResendOtpRequestDto request) {
+        log.debug("OTP resend delegated for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
+        otpService.resend(request.getEmail());
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
