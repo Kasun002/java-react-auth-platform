@@ -14,6 +14,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
@@ -39,7 +40,7 @@ public class Address {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = true)
-    @NotBlank
+    @NotNull
     private LocalStates state;
 
     @Column(nullable = false)
