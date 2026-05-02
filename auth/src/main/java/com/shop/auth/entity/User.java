@@ -67,6 +67,12 @@ public class User {
     @Column(nullable = true)
     private Role role;
 
+    @Column(nullable = false)
+    private int failedLoginAttempts = 0;
+
+    @Column(nullable = true)
+    private LocalDateTime lockedUntil;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
