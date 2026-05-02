@@ -7,9 +7,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.shop.auth.dto.RegisterRequestDto;
-import com.shop.auth.dto.ResponseDto;
 import com.shop.auth.entity.Address;
 import com.shop.auth.entity.User;
+import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.utils.Role;
@@ -25,17 +25,12 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
 
     @Override
-    public ResponseDto<Void> register(RegisterRequestDto request) {
-        ResponseDto<Void> response = new ResponseDto<>();
-
+    public void register(RegisterRequestDto request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            response.setStatus(ResponseDto.Status.FAIL);
-            response.setMessage("Email already in use");
-            return response;
+            throw new EmailAlreadyExistsException(request.getEmail());
         }
 
         User user = new User();
-        
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setPhone(request.getPhone());
@@ -59,9 +54,5 @@ public class AuthServiceImpl implements AuthService {
 
         user.getAddresses().addAll(addresses);
         userRepository.save(user);
-
-        response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setMessage("User registered successfully");
-        return response;
     }
 }

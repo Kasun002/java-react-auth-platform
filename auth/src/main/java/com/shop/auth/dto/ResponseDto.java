@@ -1,5 +1,7 @@
 package com.shop.auth.dto;
 
+import java.util.List;
+
 import lombok.Data;
 
 @Data
@@ -14,4 +16,6 @@ public class ResponseDto<T> {
     private Status status;
 
     private String message;
+
+    private List<String> errors;
 }

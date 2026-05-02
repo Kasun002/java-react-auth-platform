@@ -1,5 +1,6 @@
 package com.shop.auth.controller;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,8 +23,11 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<ResponseDto<Void>> register(@Valid @RequestBody RegisterRequestDto request) {
-        ResponseDto<Void> response = authService.register(request);
-        return ResponseEntity.ok(response);
+        authService.register(request);
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("User registered successfully");
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     // Add remaining API
