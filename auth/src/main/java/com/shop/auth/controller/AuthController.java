@@ -12,11 +12,18 @@ import com.shop.auth.dto.ResponseDto;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.utils.MaskingUtil;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
+@Tag(name = "Authentication", description = "User registration and authentication endpoints")
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -24,6 +31,20 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @Operation(
+        summary = "Register a new user",
+        description = "Creates a new user account. Defaults role to USER and status to NEW if not provided."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "User registered successfully",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Validation failed — check the errors field",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "409", description = "Email already in use",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "500", description = "Unexpected server error",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
     @PostMapping("/register")
     public ResponseEntity<ResponseDto<Void>> register(@Valid @RequestBody RegisterRequestDto request) {
         log.info("Register request received for email=[{}] name=[{}]",
