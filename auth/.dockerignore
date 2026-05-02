@@ -1,0 +1,32 @@
+# Build output — never copy target into image
+target/
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.classpath
+.project
+.settings/
+
+# Git
+.git/
+.gitignore
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# Local environment overrides — must never leak into image
+.env
+*.env
+application-local.properties
+application-dev.properties
+
+# Tests — not needed in runtime image
+src/test/

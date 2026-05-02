@@ -1,0 +1,13 @@
+# PodDisruptionBudget — guarantees minimum pods stay running during
+# node maintenance, rolling updates, or cluster upgrades.
+# Banking standard: never allow all pods to be unavailable simultaneously.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service-pdb
+  namespace: shop-platform
+spec:
+  minAvailable: 1    # At least 1 pod must be running at all times
+  selector:
+    matchLabels:
+      app: auth-service

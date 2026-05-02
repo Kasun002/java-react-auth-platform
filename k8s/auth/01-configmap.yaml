@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: shop-platform
+  labels:
+    app: auth-service
+data:
+  # Non-sensitive application config only — secrets go in Secret
+  SPRING_APPLICATION_NAME: "auth"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "none"
+  SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: "org.hibernate.dialect.PostgreSQLDialect"
+  SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: "true"
+  SPRING_JPA_SHOW_SQL: "false"
+  SPRING_FLYWAY_ENABLED: "true"
+  SPRING_FLYWAY_LOCATIONS: "classpath:db/migration"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info"
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "never"
+  SERVER_PORT: "8080"
+  # Service discovery — other microservices reference auth via this DNS
+  # Format: <service-name>.<namespace>.svc.cluster.local
+  AUTH_SERVICE_URL: "http://auth-service.shop-platform.svc.cluster.local:8080"

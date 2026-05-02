@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: shop-platform
+  labels:
+    app: auth-service
+    version: v1
+spec:
+  replicas: 2                      # Minimum 2 for HA — banking standard
+  selector:
+    matchLabels:
+      app: auth-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0            # Zero downtime — never kill pod before new one is ready
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: auth-service
+        version: v1
+    spec:
+      serviceAccountName: auth-service-sa
+      automountServiceAccountToken: false
+
+      # ── Pod-level security context (banking standard) ──────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault      # Restrict syscalls to default safe set
+
+      # ── Spread pods across nodes for HA ────────────────────────────────────
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - auth-service
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: auth-service
+          image: shop/auth-service:1.0.0   # Never use :latest in production
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+
+          # ── Container-level security context ─────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # Immutable filesystem
+            capabilities:
+              drop:
+                - ALL                      # Drop every Linux capability
+
+          # ── Resource limits — prevent noisy-neighbour / DoS ───────────────
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+
+          # ── Environment from ConfigMap (non-sensitive) ────────────────────
+          envFrom:
+            - configMapRef:
+                name: auth-config
+
+          # ── Environment from Secret (sensitive) ──────────────────────────
+          env:
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: SPRING_DATASOURCE_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: SPRING_DATASOURCE_PASSWORD
+
+          # ── Health probes using Spring Actuator ───────────────────────────
+          startupProbe:             # Gives app time to start before liveness kicks in
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12   # 30s + (12 * 10s) = 2.5 min max startup
+
+          livenessProbe:            # Restart container if app is deadlocked
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          readinessProbe:           # Remove from load balancer if not ready
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 3
+
+          # ── Writable volumes required by readOnlyRootFilesystem ──────────
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+            - name: logs-dir
+              mountPath: /app/logs
+
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
+        - name: logs-dir
+          emptyDir: {}
+
+      # ── Graceful shutdown ─────────────────────────────────────────────────
+      terminationGracePeriodSeconds: 60

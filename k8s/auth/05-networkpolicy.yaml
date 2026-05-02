@@ -1,0 +1,74 @@
+# Banking standard: default-deny all, then explicitly allow only required traffic.
+# ── Rule 1: Deny all ingress and egress by default ───────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: shop-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# ── Rule 2: Allow ingress to auth-service only from the API gateway ──────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-allow-ingress
+  namespace: shop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Only the API gateway pod can reach auth-service
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        # Allow other microservices in the same namespace (e.g. product-service)
+        - podSelector:
+            matchLabels:
+              role: internal-service
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# ── Rule 3: Allow auth-service egress only to its database ──────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-allow-egress
+  namespace: shop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-service
+  policyTypes:
+    - Egress
+  egress:
+    # Allow egress to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

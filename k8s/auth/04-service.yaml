@@ -1,0 +1,19 @@
+# ClusterIP — internal only, never exposed directly outside the cluster.
+# Other microservices discover auth via DNS:
+#   http://auth-service.shop-platform.svc.cluster.local:8080
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: shop-platform
+  labels:
+    app: auth-service
+spec:
+  type: ClusterIP
+  selector:
+    app: auth-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
