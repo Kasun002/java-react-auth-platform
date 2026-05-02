@@ -4,12 +4,19 @@ import java.util.Collections;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shop.auth.dto.LoginRequestDto;
+import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.exception.EmailAlreadyExistsException;
+import com.shop.auth.exception.AccountLockedException;
+import com.shop.auth.exception.InvalidCredentialsException;
+import com.shop.auth.exception.UserNotActiveException;
 import com.shop.auth.exception.handler.GlobalExceptionHandler;
 import com.shop.auth.fixtures.AddressDtoFixture;
+import com.shop.auth.fixtures.LoginRequestDtoFixture;
 import com.shop.auth.fixtures.RegisterRequestDtoFixture;
 import com.shop.auth.service.AuthService;
+import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,6 +38,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,6 +54,7 @@ class AuthControllerTest {
     private ObjectMapper objectMapper;
 
     private static final String REGISTER_URL = "/auth/register";
+    private static final String LOGIN_URL    = "/auth/login";
 
     @BeforeEach
     void setUp() {
@@ -239,6 +248,113 @@ class AuthControllerTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(""))
                 .andExpect(status().isBadRequest());
+        }
+    }
+
+    // ── Login — success ───────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /auth/login — success")
+    class LoginSuccess {
+
+        @Test
+        @DisplayName("Should return 200 OK with tokens and user name on valid credentials")
+        void shouldReturn200WithTokens() throws Exception {
+            LoginResponseDto loginResponse = new LoginResponseDto();
+            loginResponse.setAccessToken("access.token.value");
+            loginResponse.setRefreshToken("refresh.token.value");
+            loginResponse.setName("John Doe");
+
+            when(authService.login(any(LoginRequestDto.class))).thenReturn(loginResponse);
+
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.valid())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.message").value("Login successful"))
+                .andExpect(jsonPath("$.data.accessToken").value("access.token.value"))
+                .andExpect(jsonPath("$.data.refreshToken").value("refresh.token.value"))
+                .andExpect(jsonPath("$.data.name").value("John Doe"));
+        }
+    }
+
+    // ── Login — validation failures ───────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /auth/login — validation failures → 400")
+    class LoginValidationFailures {
+
+        @Test
+        @DisplayName("Should return 400 when username is missing")
+        void shouldReturn400WhenUsernameIsMissing() throws Exception {
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.withNoUsername())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("FAIL"))
+                .andExpect(jsonPath("$.errors[*]", hasItem(containsString("username"))));
+
+            verify(authService, never()).login(any());
+        }
+
+        @Test
+        @DisplayName("Should return 400 when password is missing")
+        void shouldReturn400WhenPasswordIsMissing() throws Exception {
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.withNoPassword())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*]", hasItem(containsString("password"))));
+
+            verify(authService, never()).login(any());
+        }
+    }
+
+    // ── Login — business failures ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /auth/login — business failures")
+    class LoginBusinessFailures {
+
+        @Test
+        @DisplayName("Should return 401 UNAUTHORIZED for invalid credentials")
+        void shouldReturn401ForInvalidCredentials() throws Exception {
+            when(authService.login(any())).thenThrow(new InvalidCredentialsException());
+
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.valid())))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value("FAIL"))
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
+        }
+
+        @Test
+        @DisplayName("Should return 403 FORBIDDEN when account is not active")
+        void shouldReturn403WhenAccountNotActive() throws Exception {
+            when(authService.login(any())).thenThrow(new UserNotActiveException(UserStatus.NEW));
+
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.valid())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value("FAIL"))
+                .andExpect(jsonPath("$.message", containsString("NEW")));
+        }
+
+        @Test
+        @DisplayName("Should return 401 UNAUTHORIZED when account is locked — message includes lock expiry")
+        void shouldReturn401WhenAccountIsLocked() throws Exception {
+            when(authService.login(any())).thenThrow(
+                    new AccountLockedException(java.time.LocalDateTime.now().plusMinutes(30)));
+
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.valid())))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value("FAIL"))
+                .andExpect(jsonPath("$.message", containsString("locked")));
         }
     }
 }
