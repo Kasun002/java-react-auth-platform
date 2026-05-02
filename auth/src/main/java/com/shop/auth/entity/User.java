@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 
 import jakarta.persistence.CascadeType;
@@ -20,9 +21,11 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+@Data
 @Entity
 @Table(name = "users")
 public class User {
@@ -59,6 +62,10 @@ public class User {
     @Column(nullable = false)
     @NotNull
     private UserStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true)
+    private Role role;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
