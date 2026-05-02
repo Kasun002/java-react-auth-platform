@@ -41,8 +41,6 @@ public class AuthController {
         @ApiResponse(responseCode = "400", description = "Validation failed — check the errors field",
             content = @Content(schema = @Schema(implementation = ResponseDto.class))),
         @ApiResponse(responseCode = "409", description = "Email already in use",
-            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-        @ApiResponse(responseCode = "500", description = "Unexpected server error",
             content = @Content(schema = @Schema(implementation = ResponseDto.class)))
     })
     @PostMapping("/register")
