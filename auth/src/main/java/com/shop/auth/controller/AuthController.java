@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import com.shop.auth.dto.ChangePasswordRequestDto;
+import com.shop.auth.dto.ForgotPasswordRequestDto;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.LogoutRequestDto;
@@ -16,6 +18,7 @@ import com.shop.auth.dto.RefreshTokenRequestDto;
 import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
+import com.shop.auth.dto.ResetPasswordRequestDto;
 import com.shop.auth.dto.ResponseDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.service.AuthService;
@@ -147,6 +150,34 @@ public class AuthController {
     }
 
     @Operation(
+        summary = "Change password",
+        description = "Changes the authenticated user's password. Requires the current password for verification. "
+                    + "All active sessions (all devices) are invalidated immediately — the user must log in again."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Password changed successfully. All sessions revoked.",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "New password fails complexity or history rules",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "401", description = "Current password is incorrect or token is invalid",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/change-password")
+    public ResponseEntity<ResponseDto<Void>> changePassword(
+            HttpServletRequest httpRequest,
+            @Valid @RequestBody ChangePasswordRequestDto body) {
+
+        String accessToken = httpRequest.getHeader("Authorization").substring(7);
+        log.info("Change-password request received");
+        authService.changePassword(accessToken, body);
+
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("Password changed successfully. Please log in again on all devices.");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
         summary = "Refresh tokens",
         description = "Exchanges a valid refresh token for a new access + refresh token pair (refresh token rotation). "
                     + "The supplied refresh token is revoked immediately after the new pair is issued — "
@@ -171,6 +202,55 @@ public class AuthController {
         response.setStatus(ResponseDto.Status.SUCCESS);
         response.setMessage("Token refreshed successfully");
         response.setData(tokens);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Forgot password",
+        description = "Sends a password reset link to the registered email address. "
+                    + "Always returns 200 regardless of whether the email exists — prevents account enumeration."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "If the email is registered, a reset link has been sent",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Validation failed",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ResponseDto<Void>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequestDto request) {
+
+        log.info("Forgot-password request for email=[{}]",
+                MaskingUtil.maskEmail(request.getEmail()));
+        authService.forgotPassword(request);
+
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("If that email is registered, a password reset link has been sent.");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Reset password",
+        description = "Resets the user's password using the single-use token from the reset email. "
+                    + "All active sessions are invalidated on success."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Password reset successfully. Please log in again.",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Token is invalid/expired, or new password fails policy",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/reset-password")
+    public ResponseEntity<ResponseDto<Void>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequestDto request) {
+
+        log.info("Reset-password request received");
+        authService.resetPassword(request);
+
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("Password reset successfully. Please log in with your new password.");
         return ResponseEntity.ok(response);
     }
 

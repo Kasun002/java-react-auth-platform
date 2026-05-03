@@ -99,7 +99,9 @@ public class SecurityConfig {
                     "/auth/login",
                     "/auth/verify-otp",
                     "/auth/resend-otp",
-                    "/auth/refresh").permitAll()
+                    "/auth/refresh",
+                    "/auth/forgot-password",
+                    "/auth/reset-password").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

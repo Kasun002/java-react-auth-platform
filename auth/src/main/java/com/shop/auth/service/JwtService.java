@@ -35,4 +35,7 @@ public interface JwtService {
 
     /** Extracts the {@code jti} (JWT ID) claim — used for per-token revocation. */
     String extractJti(String token);
+
+    /** Extracts the {@code iat} (issued-at) claim — used for user-level session invalidation. */
+    Date extractIssuedAt(String token);
 }

@@ -90,22 +90,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // Step 3 — reject blacklisted tokens (revoked on logout / password change)
+            // Step 3 — reject blacklisted tokens (revoked on logout / refresh rotation)
             String jti = jwtService.extractJti(token);
             if (tokenBlacklistService.isBlacklisted(jti)) {
                 writeUnauthorized(response, "Token has been revoked");
                 return;
             }
 
-            // Step 4 — skip if already authenticated in this request
+            // Step 4 — reject tokens issued before a user-level invalidation event
+            //           (password change, account suspension, admin-forced logout)
+            Long userId = jwtService.extractUserId(token);
+            java.time.Instant issuedAt = jwtService.extractIssuedAt(token).toInstant();
+            if (tokenBlacklistService.isUserTokensInvalidated(userId, issuedAt)) {
+                writeUnauthorized(response, "Session has been invalidated. Please log in again.");
+                return;
+            }
+
+            // Step 5 — skip if already authenticated in this request
             if (SecurityContextHolder.getContext().getAuthentication() != null) {
                 chain.doFilter(request, response);
                 return;
             }
 
-            // Step 5 — extract claims and build principal
+            // Step 6 — extract claims and build principal
             String email = jwtService.extractUsername(token);
-            Long userId = jwtService.extractUserId(token);
             List<String> permissions = jwtService.extractPermissions(token);
             List<String> groups = jwtService.extractGroups(token);
 

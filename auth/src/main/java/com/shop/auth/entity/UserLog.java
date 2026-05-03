@@ -45,6 +45,14 @@ public class UserLog {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 
+    /** Originating IP address — IPv4 or IPv6 (PCI-DSS Req 10.2.4). */
+    @Column(nullable = true, length = 45)
+    private String ipAddress;
+
+    /** HTTP User-Agent string — device/browser fingerprint (PCI-DSS Req 10.2.7). */
+    @Column(nullable = true, length = 512)
+    private String userAgent;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

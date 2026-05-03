@@ -3,6 +3,10 @@ package com.shop.auth.service.impl;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,14 +18,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.shop.auth.dto.AddressDto;
+import com.shop.auth.dto.ChangePasswordRequestDto;
+import com.shop.auth.dto.ForgotPasswordRequestDto;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RefreshTokenRequestDto;
 import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
+import com.shop.auth.dto.ResetPasswordRequestDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.entity.Address;
@@ -32,11 +41,13 @@ import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.exception.InvalidCredentialsException;
 import com.shop.auth.exception.InvalidTokenException;
 import com.shop.auth.exception.PasswordExpiredException;
+import com.shop.auth.exception.PasswordResetTokenException;
 import com.shop.auth.exception.UserNotActiveException;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
+import com.shop.auth.service.EmailService;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.service.PasswordPolicyService;
@@ -69,6 +80,17 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.security.password.max-age-days:90}")
     private int passwordMaxAgeDays;
 
+    @Value("${app.jwt.refresh-token-expiry-ms:604800000}")
+    private long refreshTokenExpiryMs;
+
+    @Value("${app.password-reset.token-ttl-minutes:15}")
+    private int passwordResetTokenTtlMinutes;
+
+    @Value("${app.password-reset.base-url}")
+    private String passwordResetBaseUrl;
+
+    private static final String RESET_TOKEN_PREFIX = "reset:token:";
+
     private final UserRepository        userRepository;
     private final UserGroupRepository   userGroupRepository;
     private final UserLogRepository     userLogRepository;
@@ -77,6 +99,8 @@ public class AuthServiceImpl implements AuthService {
     private final OtpService            otpService;
     private final TokenBlacklistService tokenBlacklistService;
     private final PasswordPolicyService passwordPolicyService;
+    private final EmailService          emailService;
+    private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     // ── Register ─────────────────────────────────────────────────────────────
 
@@ -222,6 +246,44 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
+    // ── Change password ───────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void changePassword(String accessToken, ChangePasswordRequestDto request) {
+        Long userId = jwtService.extractUserId(accessToken);
+        User user = userRepository.findById(userId)
+                .orElseThrow(InvalidCredentialsException::new);
+
+        log.info("Change-password initiated — email=[{}]", MaskingUtil.maskEmail(user.getEmail()));
+
+        // Step 1 — verify the current password
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            log.warn("Change-password rejected — wrong current password: email=[{}]",
+                    MaskingUtil.maskEmail(user.getEmail()));
+            throw new InvalidCredentialsException();
+        }
+
+        // Step 2 — enforce history: new password must not match any recent passwords
+        passwordPolicyService.enforceHistory(user, request.getNewPassword());
+
+        // Step 3 — encode and save the new password
+        String encodedNewPassword = passwordEncoder.encode(request.getNewPassword());
+        user.setPassword(encodedNewPassword);
+        user.setPasswordChangedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        // Step 4 — record new password in history
+        passwordPolicyService.recordPasswordChange(user, encodedNewPassword);
+
+        // Step 5 — invalidate all tokens for this user on all devices
+        long ttlSeconds = refreshTokenExpiryMs / 1000;
+        tokenBlacklistService.invalidateAllUserTokens(userId, ttlSeconds);
+
+        log.info("Password changed successfully — email=[{}] all sessions invalidated",
+                MaskingUtil.maskEmail(user.getEmail()));
+    }
+
     // ── Refresh ───────────────────────────────────────────────────────────────
 
     /**
@@ -305,6 +367,87 @@ public class AuthServiceImpl implements AuthService {
     public void resendOtp(ResendOtpRequestDto request) {
         log.debug("OTP resend delegated for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
         otpService.resend(request.getEmail());
+    }
+
+    // ── Forgot / reset password ───────────────────────────────────────────────
+
+    /**
+     * Generates a single-use reset token, stores its SHA-256 hash in Redis with a
+     * short TTL, and sends a reset link to the user's email.
+     *
+     * <p>Always returns the same response regardless of whether the email exists,
+     * to prevent account enumeration attacks.</p>
+     */
+    @Override
+    public void forgotPassword(ForgotPasswordRequestDto request) {
+        String email = request.getEmail();
+        log.info("Forgot-password request for email=[{}]", MaskingUtil.maskEmail(email));
+
+        userRepository.findByEmail(email).ifPresent(user -> {
+            // Generate a cryptographically random token — never stored in plain text
+            String rawToken   = UUID.randomUUID().toString();
+            String tokenHash  = HashUtil.sha256Hex(rawToken);
+
+            long ttlSeconds = (long) passwordResetTokenTtlMinutes * 60;
+            redisTemplate.opsForValue()
+                    .set(RESET_TOKEN_PREFIX + tokenHash,
+                         String.valueOf(user.getId()),
+                         ttlSeconds, TimeUnit.SECONDS);
+
+            String resetLink = passwordResetBaseUrl + "?token=" + rawToken;
+            try {
+                emailService.sendPasswordResetEmail(
+                        user.getEmail(), user.getName(), resetLink, passwordResetTokenTtlMinutes);
+            } catch (Exception e) {
+                log.error("Failed to send password reset email to=[{}]: {}",
+                        MaskingUtil.maskEmail(email), e.getMessage());
+            }
+        });
+
+        // Log at info level whether user was found or not — same response to caller either way
+        log.info("Forgot-password flow completed for email=[{}]", MaskingUtil.maskEmail(email));
+    }
+
+    /**
+     * Validates the reset token, enforces password history, saves the new password,
+     * deletes the token (single-use), and invalidates all active sessions.
+     */
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordRequestDto request) {
+        String tokenHash = HashUtil.sha256Hex(request.getToken());
+        String userIdStr = redisTemplate.opsForValue().get(RESET_TOKEN_PREFIX + tokenHash);
+
+        if (userIdStr == null) {
+            log.warn("Reset-password failed — token not found or expired");
+            throw new PasswordResetTokenException();
+        }
+
+        Long userId = Long.parseLong(userIdStr);
+        User user = userRepository.findById(userId)
+                .orElseThrow(PasswordResetTokenException::new);
+
+        log.info("Reset-password proceeding for email=[{}]", MaskingUtil.maskEmail(user.getEmail()));
+
+        // Enforce history before consuming the token — fail fast without side effects
+        passwordPolicyService.enforceHistory(user, request.getNewPassword());
+
+        // Consume the token immediately (single-use)
+        redisTemplate.delete(RESET_TOKEN_PREFIX + tokenHash);
+
+        String encodedNewPassword = passwordEncoder.encode(request.getNewPassword());
+        user.setPassword(encodedNewPassword);
+        user.setPasswordChangedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        passwordPolicyService.recordPasswordChange(user, encodedNewPassword);
+
+        // Invalidate all active sessions — user must log in with the new password
+        long ttlSeconds = refreshTokenExpiryMs / 1000;
+        tokenBlacklistService.invalidateAllUserTokens(userId, ttlSeconds);
+
+        log.info("Password reset successful — all sessions invalidated: email=[{}]",
+                MaskingUtil.maskEmail(user.getEmail()));
     }
 
     // ── Logout ────────────────────────────────────────────────────────────────
@@ -438,7 +581,36 @@ public class AuthServiceImpl implements AuthService {
         userLog.setTokenType(tokenType);
         userLog.setIssuedAt(LocalDateTime.now());
         userLog.setExpiresAt(expiresAt);
+        userLog.setIpAddress(extractClientIp());
+        userLog.setUserAgent(extractUserAgent());
         userLogRepository.save(userLog);
+    }
+
+    /**
+     * Extracts the real client IP, honouring the {@code X-Forwarded-For} header
+     * set by load balancers and reverse proxies.
+     */
+    private String extractClientIp() {
+        HttpServletRequest request = currentRequest();
+        if (request == null) return null;
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim(); // first entry is the originating client
+        }
+        return request.getRemoteAddr();
+    }
+
+    private String extractUserAgent() {
+        HttpServletRequest request = currentRequest();
+        if (request == null) return null;
+        String ua = request.getHeader("User-Agent");
+        return (ua != null && ua.length() > 512) ? ua.substring(0, 512) : ua;
+    }
+
+    private HttpServletRequest currentRequest() {
+        ServletRequestAttributes attrs =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        return attrs != null ? attrs.getRequest() : null;
     }
 
 }

@@ -33,6 +33,18 @@ public class EmailServiceImpl implements EmailService {
         log.info("OTP email sent to=[{}]", MaskingUtil.maskEmail(toEmail));
     }
 
+    @Override
+    public void sendPasswordResetEmail(String toEmail, String toName, String resetLink, int expiryMinutes) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromEmail);
+        message.setTo(toEmail);
+        message.setSubject("Password Reset Request");
+        message.setText(buildPasswordResetEmailBody(toName, resetLink, expiryMinutes));
+
+        mailSender.send(message);
+        log.info("Password reset email sent to=[{}]", MaskingUtil.maskEmail(toEmail));
+    }
+
     private String buildOtpEmailBody(String name, String otp, int expiryMinutes) {
         return "Dear " + name + ",\n\n"
              + "Your one-time verification code is:\n\n"
@@ -41,5 +53,16 @@ public class EmailServiceImpl implements EmailService {
              + "Do NOT share this code with anyone.\n\n"
              + "If you did not request this, please ignore this email.\n\n"
              + "Regards,\nShop Platform";
+    }
+
+    private String buildPasswordResetEmailBody(String name, String resetLink, int expiryMinutes) {
+        return "Dear " + name + ",\n\n"
+             + "We received a request to reset your password.\n\n"
+             + "Click the link below to set a new password. "
+             + "This link expires in " + expiryMinutes + " minutes and can only be used once.\n\n"
+             + "    " + resetLink + "\n\n"
+             + "If you did not request a password reset, you can safely ignore this email.\n"
+             + "Your password will not be changed.\n\n"
+             + "Regards,\nShop Platform Security Team";
     }
 }

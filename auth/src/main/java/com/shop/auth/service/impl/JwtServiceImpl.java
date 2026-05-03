@@ -118,6 +118,11 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
+    public Date extractIssuedAt(String token) {
+        return extractClaim(token, Claims::getIssuedAt);
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public List<String> extractGroups(String token) {
         return extractClaim(token, claims -> {
