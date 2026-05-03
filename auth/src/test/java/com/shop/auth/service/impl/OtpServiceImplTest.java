@@ -12,6 +12,7 @@ import com.shop.auth.exception.OtpResendLimitException;
 import com.shop.auth.repository.OtpVerificationRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.EmailService;
+import com.shop.auth.service.OtpRateLimitService;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,7 @@ class OtpServiceImplTest {
     @Mock private OtpVerificationRepository otpVerificationRepository;
     @Mock private UserRepository            userRepository;
     @Mock private EmailService              emailService;
+    @Mock private OtpRateLimitService       otpRateLimitService;
     @InjectMocks private OtpServiceImpl otpService;
 
     private User newUser;
@@ -302,8 +304,8 @@ class OtpServiceImplTest {
         @DisplayName("Should throw OtpResendLimitException when resend rate limit is exceeded")
         void shouldThrowWhenResendLimitExceeded() {
             when(userRepository.findByEmail(newUser.getEmail())).thenReturn(Optional.of(newUser));
-            when(otpVerificationRepository.countByUserAndCreatedAtAfter(eq(newUser), any()))
-                    .thenReturn(3L);  // already at limit
+            when(otpRateLimitService.checkAndIncrementResend(eq(newUser.getId()), anyInt()))
+                    .thenReturn(false);  // limit exceeded
 
             assertThatThrownBy(() -> otpService.resend(newUser.getEmail()))
                     .isInstanceOf(OtpResendLimitException.class);
@@ -313,8 +315,8 @@ class OtpServiceImplTest {
         @DisplayName("Should invalidate old OTPs and issue a new one on valid resend")
         void shouldInvalidateOldOtpsOnResend() {
             when(userRepository.findByEmail(newUser.getEmail())).thenReturn(Optional.of(newUser));
-            when(otpVerificationRepository.countByUserAndCreatedAtAfter(eq(newUser), any()))
-                    .thenReturn(0L);
+            when(otpRateLimitService.checkAndIncrementResend(eq(newUser.getId()), anyInt()))
+                    .thenReturn(true);  // within limit
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
             when(otpVerificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(emailService).sendOtp(anyString(), anyString(), anyString(), anyInt());

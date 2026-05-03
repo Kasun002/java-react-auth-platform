@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import com.shop.auth.security.UserPrincipal;
 import com.shop.auth.service.JwtService;
+import com.shop.auth.service.TokenBlacklistService;
 import com.shop.auth.utils.TokenType;
 
 import jakarta.servlet.FilterChain;
@@ -57,7 +58,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtService jwtService;
+    private final JwtService             jwtService;
+    private final TokenBlacklistService  tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -88,13 +90,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // Step 3 — skip if already authenticated in this request
+            // Step 3 — reject blacklisted tokens (revoked on logout / password change)
+            String jti = jwtService.extractJti(token);
+            if (tokenBlacklistService.isBlacklisted(jti)) {
+                writeUnauthorized(response, "Token has been revoked");
+                return;
+            }
+
+            // Step 4 — skip if already authenticated in this request
             if (SecurityContextHolder.getContext().getAuthentication() != null) {
                 chain.doFilter(request, response);
                 return;
             }
 
-            // Step 4 — extract claims and build principal
+            // Step 5 — extract claims and build principal
             String email = jwtService.extractUsername(token);
             Long userId = jwtService.extractUserId(token);
             List<String> permissions = jwtService.extractPermissions(token);

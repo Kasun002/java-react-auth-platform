@@ -32,4 +32,7 @@ public interface JwtService {
 
     /** Extracts the {@code groups} claim as a list of group names. */
     List<String> extractGroups(String token);
+
+    /** Extracts the {@code jti} (JWT ID) claim — used for per-token revocation. */
+    String extractJti(String token);
 }

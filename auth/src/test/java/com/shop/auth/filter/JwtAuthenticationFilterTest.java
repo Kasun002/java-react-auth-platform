@@ -24,6 +24,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.shop.auth.security.UserPrincipal;
 import com.shop.auth.service.JwtService;
+import com.shop.auth.service.TokenBlacklistService;
 import com.shop.auth.utils.TokenType;
 
 import jakarta.servlet.FilterChain;
@@ -33,8 +34,9 @@ import jakarta.servlet.FilterChain;
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 class JwtAuthenticationFilterTest {
 
-    @Mock private JwtService   jwtService;
-    @Mock private FilterChain  filterChain;
+    @Mock private JwtService            jwtService;
+    @Mock private TokenBlacklistService tokenBlacklistService;
+    @Mock private FilterChain           filterChain;
 
     @InjectMocks private JwtAuthenticationFilter filter;
 
@@ -153,6 +155,43 @@ class JwtAuthenticationFilterTest {
         }
     }
 
+    // ── Blacklisted token ─────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Blacklisted token")
+    class BlacklistedToken {
+
+        @Test
+        @DisplayName("Should return 401 when token jti is on the blacklist — revoked token")
+        void shouldReturn401ForBlacklistedToken() throws Exception {
+            request.addHeader("Authorization", "Bearer " + VALID_TOKEN);
+            when(jwtService.isTokenValid(VALID_TOKEN)).thenReturn(true);
+            when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
+            when(jwtService.extractJti(VALID_TOKEN)).thenReturn("revoked-jti");
+            when(tokenBlacklistService.isBlacklisted("revoked-jti")).thenReturn(true);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(401);
+            verify(filterChain, never()).doFilter(request, response);
+        }
+
+        @Test
+        @DisplayName("Should write FAIL JSON body when token is blacklisted")
+        void shouldWriteJsonBodyForBlacklistedToken() throws Exception {
+            request.addHeader("Authorization", "Bearer " + VALID_TOKEN);
+            when(jwtService.isTokenValid(VALID_TOKEN)).thenReturn(true);
+            when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
+            when(jwtService.extractJti(VALID_TOKEN)).thenReturn("revoked-jti");
+            when(tokenBlacklistService.isBlacklisted("revoked-jti")).thenReturn(true);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getContentType()).contains("application/json");
+            assertThat(response.getContentAsString()).contains("FAIL");
+        }
+    }
+
     // ── Valid ACCESS token ────────────────────────────────────────────────────
 
     @Nested
@@ -164,6 +203,8 @@ class JwtAuthenticationFilterTest {
             request.addHeader("Authorization", "Bearer " + VALID_TOKEN);
             when(jwtService.isTokenValid(VALID_TOKEN)).thenReturn(true);
             when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
+            when(jwtService.extractJti(VALID_TOKEN)).thenReturn("test-jti-uuid");
+            when(tokenBlacklistService.isBlacklisted("test-jti-uuid")).thenReturn(false);
             when(jwtService.extractUsername(VALID_TOKEN)).thenReturn("john@example.com");
             when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(42L);
             when(jwtService.extractPermissions(VALID_TOKEN))

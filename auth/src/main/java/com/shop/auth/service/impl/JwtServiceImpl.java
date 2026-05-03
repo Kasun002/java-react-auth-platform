@@ -113,6 +113,11 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public List<String> extractGroups(String token) {
         return extractClaim(token, claims -> {

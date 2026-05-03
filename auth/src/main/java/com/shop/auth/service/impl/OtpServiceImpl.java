@@ -18,6 +18,7 @@ import com.shop.auth.exception.OtpResendLimitException;
 import com.shop.auth.repository.OtpVerificationRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.EmailService;
+import com.shop.auth.service.OtpRateLimitService;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
@@ -44,6 +45,7 @@ public class OtpServiceImpl implements OtpService {
     private final OtpVerificationRepository otpVerificationRepository;
     private final UserRepository            userRepository;
     private final EmailService              emailService;
+    private final OtpRateLimitService       otpRateLimitService;
 
     // ── Generate & Send ───────────────────────────────────────────────────────
 
@@ -164,11 +166,8 @@ public class OtpServiceImpl implements OtpService {
             throw new OtpInvalidException();
         }
 
-        LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
-        long recentCount = otpVerificationRepository.countByUserAndCreatedAtAfter(user, oneHourAgo);
-        if (recentCount >= maxResendsPerHour) {
-            log.warn("OTP resend — rate limit hit: email=[{}] count=[{}]",
-                    MaskingUtil.maskEmail(email), recentCount);
+        if (!otpRateLimitService.checkAndIncrementResend(user.getId(), maxResendsPerHour)) {
+            log.warn("OTP resend — rate limit hit: email=[{}]", MaskingUtil.maskEmail(email));
             throw new OtpResendLimitException();
         }
 
