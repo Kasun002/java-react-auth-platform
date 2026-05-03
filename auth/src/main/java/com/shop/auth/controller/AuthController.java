@@ -7,8 +7,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
+import com.shop.auth.dto.LogoutRequestDto;
+import com.shop.auth.dto.RefreshTokenRequestDto;
+import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.ResponseDto;
@@ -138,6 +143,65 @@ public class AuthController {
         ResponseDto<Void> response = new ResponseDto<>();
         response.setStatus(ResponseDto.Status.SUCCESS);
         response.setMessage("OTP resent successfully. Please check your email.");
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Refresh tokens",
+        description = "Exchanges a valid refresh token for a new access + refresh token pair (refresh token rotation). "
+                    + "The supplied refresh token is revoked immediately after the new pair is issued — "
+                    + "each refresh token can only be used once."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "New token pair issued",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "400", description = "Validation failed — refresh token is required",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "401", description = "Refresh token is invalid, expired, or already used",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/refresh")
+    public ResponseEntity<ResponseDto<RefreshTokenResponseDto>> refresh(
+            @Valid @RequestBody RefreshTokenRequestDto request) {
+
+        log.info("Token refresh request received");
+        RefreshTokenResponseDto tokens = authService.refresh(request);
+
+        ResponseDto<RefreshTokenResponseDto> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("Token refreshed successfully");
+        response.setData(tokens);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(
+        summary = "Logout",
+        description = "Revokes the current session by blacklisting both the access and refresh token JTIs "
+                    + "in Redis. The access token is taken from the Authorization header. "
+                    + "The refresh token should be provided in the request body to fully invalidate the session."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Logged out successfully",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid access token",
+            content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    })
+    @PostMapping("/logout")
+    public ResponseEntity<ResponseDto<Void>> logout(
+            HttpServletRequest httpRequest,
+            @RequestBody(required = false) LogoutRequestDto body) {
+
+        // The Authorization header is guaranteed to be present and valid at this point
+        // because JwtAuthenticationFilter has already validated it before this method runs.
+        String accessToken  = httpRequest.getHeader("Authorization").substring(7);
+        String refreshToken = body != null ? body.getRefreshToken() : null;
+
+        log.info("Logout request received");
+        authService.logout(accessToken, refreshToken);
+
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.SUCCESS);
+        response.setMessage("Logged out successfully");
         return ResponseEntity.ok(response);
     }
 }

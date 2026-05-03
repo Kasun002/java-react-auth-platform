@@ -1,5 +1,6 @@
 package com.shop.auth.service.impl;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -16,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.shop.auth.dto.AddressDto;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
+import com.shop.auth.dto.RefreshTokenRequestDto;
+import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.UserDto;
@@ -26,6 +29,7 @@ import com.shop.auth.entity.UserLog;
 import com.shop.auth.exception.AccountLockedException;
 import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.exception.InvalidCredentialsException;
+import com.shop.auth.exception.InvalidTokenException;
 import com.shop.auth.exception.UserNotActiveException;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
@@ -33,6 +37,7 @@ import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.OtpService;
+import com.shop.auth.service.TokenBlacklistService;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
 import com.shop.auth.utils.Role;
@@ -58,12 +63,13 @@ public class AuthServiceImpl implements AuthService {
     private static final String DUMMY_BCRYPT_HASH =
             "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
-    private final UserRepository      userRepository;
-    private final UserGroupRepository userGroupRepository;
-    private final UserLogRepository   userLogRepository;
-    private final PasswordEncoder     passwordEncoder;
-    private final JwtService          jwtService;
-    private final OtpService          otpService;
+    private final UserRepository        userRepository;
+    private final UserGroupRepository   userGroupRepository;
+    private final UserLogRepository     userLogRepository;
+    private final PasswordEncoder       passwordEncoder;
+    private final JwtService            jwtService;
+    private final OtpService            otpService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     // ── Register ─────────────────────────────────────────────────────────────
 
@@ -195,6 +201,77 @@ public class AuthServiceImpl implements AuthService {
         return response;
     }
 
+    // ── Refresh ───────────────────────────────────────────────────────────────
+
+    /**
+     * Exchanges a valid refresh token for a new access + refresh token pair.
+     *
+     * <p>Validation order (each step fails fast with the same generic 401 to
+     * prevent information leakage):</p>
+     * <ol>
+     *   <li>Signature and expiry — rejects tampered or expired tokens.</li>
+     *   <li>Token type must be REFRESH — rejects access tokens used as refresh tokens.</li>
+     *   <li>JTI blacklist check — rejects already-used or revoked refresh tokens.
+     *       A hit here indicates possible token theft; the caller should re-authenticate.</li>
+     *   <li>User must still be ACTIVE — rejects suspended accounts.</li>
+     * </ol>
+     *
+     * <p>Refresh token rotation: the supplied refresh token is blacklisted immediately
+     * after the new pair is generated. This ensures each refresh token can be used
+     * exactly once, limiting the window for replay attacks.</p>
+     */
+    @Override
+    @Transactional
+    public RefreshTokenResponseDto refresh(RefreshTokenRequestDto request) {
+        String token = request.getRefreshToken();
+
+        // Step 1 — validate signature and expiry
+        if (!jwtService.isTokenValid(token)) {
+            log.warn("Refresh rejected — invalid or expired token");
+            throw new InvalidTokenException();
+        }
+
+        // Step 2 — must be a REFRESH token (block access tokens from being used here)
+        if (!TokenType.REFRESH.name().equals(jwtService.extractTokenType(token))) {
+            log.warn("Refresh rejected — wrong token type");
+            throw new InvalidTokenException();
+        }
+
+        // Step 3 — check blacklist (already-used or explicitly revoked)
+        String jti = jwtService.extractJti(token);
+        if (tokenBlacklistService.isBlacklisted(jti)) {
+            log.warn("Refresh rejected — token already revoked (possible replay attack): jti=[{}]", jti);
+            throw new InvalidTokenException();
+        }
+
+        // Step 4 — load user and verify account is still active
+        String email = jwtService.extractUsername(token);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.warn("Refresh rejected — user not found: email=[{}]", MaskingUtil.maskEmail(email));
+                    return new InvalidTokenException();
+                });
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            log.warn("Refresh rejected — account not active: email=[{}] status=[{}]",
+                    MaskingUtil.maskEmail(email), user.getStatus());
+            throw new InvalidTokenException();
+        }
+
+        // Issue new token pair BEFORE blacklisting the old refresh token
+        String newAccessToken  = jwtService.generateAccessToken(user);
+        String newRefreshToken = jwtService.generateRefreshToken(user);
+
+        persistUserLog(user, newAccessToken,  TokenType.ACCESS);
+        persistUserLog(user, newRefreshToken, TokenType.REFRESH);
+
+        // Rotate: blacklist the consumed refresh token so it cannot be reused
+        revokeToken(token, "refresh");
+
+        log.info("Token refresh successful — email=[{}]", MaskingUtil.maskEmail(email));
+        return new RefreshTokenResponseDto(newAccessToken, newRefreshToken);
+    }
+
     // ── OTP verification ──────────────────────────────────────────────────────
 
     @Override
@@ -207,6 +284,60 @@ public class AuthServiceImpl implements AuthService {
     public void resendOtp(ResendOtpRequestDto request) {
         log.debug("OTP resend delegated for email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
         otpService.resend(request.getEmail());
+    }
+
+    // ── Logout ────────────────────────────────────────────────────────────────
+
+    /**
+     * Revokes the session by blacklisting both the access and refresh token JTIs
+     * in Redis.  Each entry is stored with the token's remaining TTL so Redis
+     * self-expires the entry — the blacklist never grows unbounded.
+     *
+     * <p>Each token is revoked independently; failure to revoke one does not
+     * prevent revoking the other.  A missing or invalid refresh token is logged
+     * as a warning but does not cause the call to fail — the access token is
+     * always revoked.</p>
+     */
+    @Override
+    public void logout(String accessToken, String refreshToken) {
+        String email = extractEmailSafe(accessToken);
+        log.info("Logout initiated — email=[{}]", MaskingUtil.maskEmail(email));
+
+        revokeToken(accessToken, "access");
+
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            revokeToken(refreshToken, "refresh");
+        } else {
+            log.warn("Logout called without refresh token — refresh token not revoked: email=[{}]",
+                    MaskingUtil.maskEmail(email));
+        }
+
+        log.info("Logout completed — both tokens revoked: email=[{}]", MaskingUtil.maskEmail(email));
+    }
+
+    /**
+     * Extracts the JTI from the token, computes its remaining lifetime in seconds,
+     * and adds it to the Redis blacklist.  If the token is already expired the TTL
+     * will be &le; 0 and {@link TokenBlacklistService#blacklist} will be a no-op.
+     */
+    private void revokeToken(String token, String tokenLabel) {
+        try {
+            String jti        = jwtService.extractJti(token);
+            long   ttlSeconds = jwtService.extractExpiration(token).toInstant().getEpochSecond()
+                                - Instant.now().getEpochSecond();
+            tokenBlacklistService.blacklist(jti, ttlSeconds);
+            log.debug("Token revoked — type=[{}] jti=[{}] ttlSeconds=[{}]", tokenLabel, jti, ttlSeconds);
+        } catch (Exception e) {
+            log.warn("Failed to revoke {} token during logout: {}", tokenLabel, e.getMessage());
+        }
+    }
+
+    private String extractEmailSafe(String token) {
+        try {
+            return jwtService.extractUsername(token);
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
