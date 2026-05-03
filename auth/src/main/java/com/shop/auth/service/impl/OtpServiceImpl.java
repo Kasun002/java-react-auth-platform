@@ -2,7 +2,9 @@ package com.shop.auth.service.impl;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -15,9 +17,10 @@ import com.shop.auth.exception.OtpExpiredException;
 import com.shop.auth.exception.OtpInvalidException;
 import com.shop.auth.exception.OtpMaxAttemptsException;
 import com.shop.auth.exception.OtpResendLimitException;
+import com.shop.auth.messaging.OtpEmailMessage;
+import com.shop.auth.messaging.OtpEmailPublisher;
 import com.shop.auth.repository.OtpVerificationRepository;
 import com.shop.auth.repository.UserRepository;
-import com.shop.auth.service.EmailService;
 import com.shop.auth.service.OtpRateLimitService;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.utils.HashUtil;
@@ -44,14 +47,15 @@ public class OtpServiceImpl implements OtpService {
 
     private final OtpVerificationRepository otpVerificationRepository;
     private final UserRepository            userRepository;
-    private final EmailService              emailService;
+    private final OtpEmailPublisher         otpEmailPublisher;
     private final OtpRateLimitService       otpRateLimitService;
 
     // ── Generate & Send ───────────────────────────────────────────────────────
 
     /**
-     * REQUIRES_NEW: runs in its own transaction so that a mail-send failure rolls back
+     * REQUIRES_NEW: runs in its own transaction so that a queue-publish failure rolls back
      * only the OTP record, not the already-committed user registration.
+     * The user can retry via {@code /auth/resend-otp}.
      */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -68,8 +72,19 @@ public class OtpServiceImpl implements OtpService {
         record.setExpiresAt(LocalDateTime.now().plusMinutes(otpExpiryMinutes));
         otpVerificationRepository.save(record);
 
-        emailService.sendOtp(user.getEmail(), user.getName(), rawOtp, otpExpiryMinutes);
-        log.info("OTP generated and sent for email=[{}]", MaskingUtil.maskEmail(user.getEmail()));
+        // Publish to SQS — the consumer delivers via SES asynchronously.
+        // The raw OTP is ephemeral: it lives in SQS only until the consumer deletes the message.
+        OtpEmailMessage message = new OtpEmailMessage(
+                UUID.randomUUID().toString(),
+                user.getEmail(),
+                user.getName(),
+                rawOtp,
+                otpExpiryMinutes,
+                Instant.now());
+        otpEmailPublisher.publish(message);
+
+        log.info("OTP generated and queued for delivery: email=[{}]",
+                MaskingUtil.maskEmail(user.getEmail()));
     }
 
     // ── Verify ────────────────────────────────────────────────────────────────

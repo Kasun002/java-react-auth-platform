@@ -9,9 +9,10 @@ import com.shop.auth.exception.OtpExpiredException;
 import com.shop.auth.exception.OtpInvalidException;
 import com.shop.auth.exception.OtpMaxAttemptsException;
 import com.shop.auth.exception.OtpResendLimitException;
+import com.shop.auth.messaging.OtpEmailMessage;
+import com.shop.auth.messaging.OtpEmailPublisher;
 import com.shop.auth.repository.OtpVerificationRepository;
 import com.shop.auth.repository.UserRepository;
-import com.shop.auth.service.EmailService;
 import com.shop.auth.service.OtpRateLimitService;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
@@ -32,7 +33,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
@@ -47,7 +47,7 @@ class OtpServiceImplTest {
 
     @Mock private OtpVerificationRepository otpVerificationRepository;
     @Mock private UserRepository            userRepository;
-    @Mock private EmailService              emailService;
+    @Mock private OtpEmailPublisher         otpEmailPublisher;
     @Mock private OtpRateLimitService       otpRateLimitService;
     @InjectMocks private OtpServiceImpl otpService;
 
@@ -79,7 +79,6 @@ class OtpServiceImplTest {
             when(otpVerificationRepository.save(any(OtpVerification.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
-            doNothing().when(emailService).sendOtp(anyString(), anyString(), anyString(), anyInt());
 
             otpService.generateAndSend(newUser);
 
@@ -92,7 +91,6 @@ class OtpServiceImplTest {
             when(otpVerificationRepository.save(any(OtpVerification.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
-            doNothing().when(emailService).sendOtp(anyString(), anyString(), anyString(), anyInt());
 
             otpService.generateAndSend(newUser);
 
@@ -106,19 +104,20 @@ class OtpServiceImplTest {
                     .thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
 
-            ArgumentCaptor<String> rawOtpCaptor = ArgumentCaptor.forClass(String.class);
-            doNothing().when(emailService).sendOtp(anyString(), anyString(), rawOtpCaptor.capture(), anyInt());
-
             otpService.generateAndSend(newUser);
 
+            // Capture the OTP published to SQS (raw value — ephemeral in-flight)
+            ArgumentCaptor<OtpEmailMessage> msgCaptor = ArgumentCaptor.forClass(OtpEmailMessage.class);
+            verify(otpEmailPublisher).publish(msgCaptor.capture());
+            String rawOtp = msgCaptor.getValue().otp();
+
+            // Capture what was persisted to the DB
             ArgumentCaptor<OtpVerification> savedCaptor = ArgumentCaptor.forClass(OtpVerification.class);
             verify(otpVerificationRepository).save(savedCaptor.capture());
-
-            String rawOtp    = rawOtpCaptor.getValue();
             String savedHash = savedCaptor.getValue().getOtpHash();
 
             assertThat(savedHash).isNotEqualTo(rawOtp);
-            assertThat(savedHash).hasSize(64);     // SHA-256 hex = 64 chars
+            assertThat(savedHash).hasSize(64);  // SHA-256 hex = 64 chars
         }
 
         @Test
@@ -127,7 +126,6 @@ class OtpServiceImplTest {
             when(otpVerificationRepository.save(any(OtpVerification.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
-            doNothing().when(emailService).sendOtp(anyString(), anyString(), anyString(), anyInt());
 
             otpService.generateAndSend(newUser);
 
@@ -140,33 +138,38 @@ class OtpServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should send email with the raw OTP to the user's address")
-        void shouldSendEmailToUser() {
+        @DisplayName("Should publish OTP email message with the user's email, name and expiry")
+        void shouldPublishMessageWithCorrectRecipient() {
             when(otpVerificationRepository.save(any(OtpVerification.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
-            doNothing().when(emailService).sendOtp(eq("john.doe@example.com"), eq("John Doe"), anyString(), eq(10));
 
             otpService.generateAndSend(newUser);
 
-            verify(emailService).sendOtp(eq("john.doe@example.com"), eq("John Doe"), anyString(), eq(10));
+            ArgumentCaptor<OtpEmailMessage> captor = ArgumentCaptor.forClass(OtpEmailMessage.class);
+            verify(otpEmailPublisher).publish(captor.capture());
+            OtpEmailMessage published = captor.getValue();
+
+            assertThat(published.email()).isEqualTo("john.doe@example.com");
+            assertThat(published.name()).isEqualTo("John Doe");
+            assertThat(published.expiryMinutes()).isEqualTo(10);
         }
 
         @Test
-        @DisplayName("Generated OTP must be exactly 6 digits and include full range (0-padded)")
+        @DisplayName("Generated OTP in the published message must be exactly 6 digits (zero-padded)")
         void generatedOtpMustBeSixDigits() {
             when(otpVerificationRepository.save(any(OtpVerification.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
 
-            ArgumentCaptor<String> otpCaptor = ArgumentCaptor.forClass(String.class);
-            doNothing().when(emailService).sendOtp(anyString(), anyString(), otpCaptor.capture(), anyInt());
-
             otpService.generateAndSend(newUser);
 
-            assertThat(otpCaptor.getValue())
+            ArgumentCaptor<OtpEmailMessage> captor = ArgumentCaptor.forClass(OtpEmailMessage.class);
+            verify(otpEmailPublisher).publish(captor.capture());
+
+            assertThat(captor.getValue().otp())
                     .matches("\\d{6}")
-                    .hasSize(6);   // always exactly 6 digits (zero-padded)
+                    .hasSize(6);
         }
     }
 
@@ -319,7 +322,6 @@ class OtpServiceImplTest {
                     .thenReturn(true);  // within limit
             doNothing().when(otpVerificationRepository).invalidateAllUnusedForUser(newUser);
             when(otpVerificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            doNothing().when(emailService).sendOtp(anyString(), anyString(), anyString(), anyInt());
 
             otpService.resend(newUser.getEmail());
 
