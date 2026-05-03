@@ -5,7 +5,7 @@ import java.io.IOException;
 import com.shop.auth.dto.ResponseDto;
 import com.shop.auth.filter.JwtAuthenticationFilter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;  // local static instance — not injected
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -48,8 +48,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final ObjectMapper            objectMapper;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -125,6 +126,6 @@ public class SecurityConfig {
 
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(objectMapper.writeValueAsString(body));
+        response.getWriter().write(OBJECT_MAPPER.writeValueAsString(body));
     }
 }
