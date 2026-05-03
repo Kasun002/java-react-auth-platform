@@ -2,8 +2,12 @@ package com.shop.auth.service.impl;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.shop.auth.entity.OtpVerification;
 import com.shop.auth.entity.User;
@@ -17,15 +21,11 @@ import com.shop.auth.service.EmailService;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
+import com.shop.auth.utils.Otp;
 import com.shop.auth.utils.UserStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -58,7 +58,7 @@ public class OtpServiceImpl implements OtpService {
         // A previously captured (but undelivered or intercepted) OTP must not remain valid.
         otpVerificationRepository.invalidateAllUnusedForUser(user);
 
-        String rawOtp = generateRawOtp();
+        String rawOtp = Otp.generateRawOtp();
 
         OtpVerification record = new OtpVerification();
         record.setUser(user);
@@ -174,13 +174,6 @@ public class OtpServiceImpl implements OtpService {
 
         generateAndSend(user);
         log.info("OTP resent for email=[{}]", MaskingUtil.maskEmail(email));
-    }
-
-    // ── Private helpers ───────────────────────────────────────────────────────
-
-    private static String generateRawOtp() {
-        // Full 10^6 entropy (000000–999999). Zero-padded to always produce exactly 6 digits.
-        return String.format("%06d", new SecureRandom().nextInt(1_000_000));
     }
 
 }
