@@ -8,6 +8,7 @@ import com.shop.auth.utils.Gender;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -62,6 +63,19 @@ public class UserDto {
 
     @Schema(description = "Last profile update timestamp")
     private LocalDateTime updatedAt;
+
+    // ── RBAC — computed at login time from group/role membership ─────────────
+
+    @Schema(description = "User group memberships", example = "[\"RETAIL_CUSTOMER\"]")
+    private List<String> groups;
+
+    @Schema(description = "Roles from group membership and direct assignments",
+            example = "[\"ROLE_CUSTOMER_BASIC\"]")
+    private List<String> roles;
+
+    @Schema(description = "Effective permission codes — union of all assigned roles",
+            example = "[\"ACCOUNT_VIEW\", \"TRANSACTION_VIEW\"]")
+    private List<String> effectivePermissions;
 
     // ── Relations ─────────────────────────────────────────────────────────────
 

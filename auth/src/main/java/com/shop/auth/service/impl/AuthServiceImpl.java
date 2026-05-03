@@ -1,12 +1,12 @@
 package com.shop.auth.service.impl;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,6 +32,7 @@ import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.OtpService;
+import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
@@ -223,6 +224,22 @@ public class AuthServiceImpl implements AuthService {
                 })
                 .collect(Collectors.toList());
 
+        // RBAC fields — computed from group/role membership (empty until Step 4 assigns groups)
+        List<String> groupNames = user.getGroups().stream()
+                .map(g -> g.getName())
+                .collect(Collectors.toList());
+
+        Set<String> roleNames = new LinkedHashSet<>();
+        user.getGroups().forEach(g -> g.getRoles().forEach(r -> roleNames.add(r.getName())));
+        user.getDirectRoles().forEach(r -> roleNames.add(r.getName()));
+
+        Set<String> permCodes = new LinkedHashSet<>();
+        user.getGroups().forEach(g ->
+                g.getRoles().forEach(r ->
+                        r.getPermissions().forEach(p -> permCodes.add(p.getCode()))));
+        user.getDirectRoles().forEach(r ->
+                r.getPermissions().forEach(p -> permCodes.add(p.getCode())));
+
         UserDto dto = new UserDto();
         dto.setId(user.getId());
         dto.setName(user.getName());
@@ -236,6 +253,9 @@ public class AuthServiceImpl implements AuthService {
         dto.setLastLoginAt(user.getLastLoginAt());
         dto.setCreatedAt(user.getCreatedAt());
         dto.setUpdatedAt(user.getUpdatedAt());
+        dto.setGroups(groupNames);
+        dto.setRoles(new ArrayList<>(roleNames));
+        dto.setEffectivePermissions(new ArrayList<>(permCodes));
         dto.setAddresses(addressDtos);
         return dto;
     }
@@ -248,24 +268,11 @@ public class AuthServiceImpl implements AuthService {
 
         UserLog userLog = new UserLog();
         userLog.setUser(user);
-        userLog.setUserToken(sha256Hex(token));  // store hash, not raw token
+        userLog.setUserToken(HashUtil.sha256Hex(token));  // store hash, not raw token
         userLog.setTokenType(tokenType);
         userLog.setIssuedAt(LocalDateTime.now());
         userLog.setExpiresAt(expiresAt);
         userLogRepository.save(userLog);
     }
 
-    private static String sha256Hex(String input) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256")
-                    .digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(64);
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
-    }
 }

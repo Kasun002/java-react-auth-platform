@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -18,6 +19,19 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * Handles {@code @PreAuthorize} failures — returns 403 JSON instead of
+     * Spring Security's default 403 page.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ResponseDto<Void>> handleAccessDeniedException(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        ResponseDto<Void> response = new ResponseDto<>();
+        response.setStatus(ResponseDto.Status.FAIL);
+        response.setMessage("Access denied");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ResponseDto<Void>> handleBusinessException(BusinessException ex) {

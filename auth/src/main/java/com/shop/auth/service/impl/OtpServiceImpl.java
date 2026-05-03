@@ -2,7 +2,6 @@ package com.shop.auth.service.impl;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 
@@ -16,6 +15,7 @@ import com.shop.auth.repository.OtpVerificationRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.EmailService;
 import com.shop.auth.service.OtpService;
+import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
 import com.shop.auth.utils.UserStatus;
 
@@ -62,7 +62,7 @@ public class OtpServiceImpl implements OtpService {
 
         OtpVerification record = new OtpVerification();
         record.setUser(user);
-        record.setOtpHash(sha256Hex(rawOtp));
+        record.setOtpHash(HashUtil.sha256Hex(rawOtp));
         record.setExpiresAt(LocalDateTime.now().plusMinutes(otpExpiryMinutes));
         otpVerificationRepository.save(record);
 
@@ -123,7 +123,7 @@ public class OtpServiceImpl implements OtpService {
         // MessageDigest.isEqual is guaranteed constant-time for equal-length inputs;
         // both operands are always 64-byte UTF-8 hex strings.
         boolean hashMatch = MessageDigest.isEqual(
-                sha256Hex(otp).getBytes(StandardCharsets.UTF_8),
+                HashUtil.sha256Hex(otp).getBytes(StandardCharsets.UTF_8),
                 record.getOtpHash().getBytes(StandardCharsets.UTF_8));
         if (!hashMatch) {
             log.warn("OTP verify — wrong OTP: email=[{}] attempt=[{}]",
@@ -183,17 +183,4 @@ public class OtpServiceImpl implements OtpService {
         return String.format("%06d", new SecureRandom().nextInt(1_000_000));
     }
 
-    private static String sha256Hex(String input) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256")
-                    .digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(64);
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
-    }
 }
