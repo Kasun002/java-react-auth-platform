@@ -34,3 +34,4 @@ build/
 
 auth.log
 .DS_Store
+/logs

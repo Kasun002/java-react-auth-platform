@@ -3,7 +3,9 @@ package com.shop.auth.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.shop.auth.utils.Gender;
 import com.shop.auth.utils.Role;
@@ -18,6 +20,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Email;
@@ -84,6 +89,24 @@ public class User {
     /** Timestamp of the last successful login — updated on every login. */
     @Column(nullable = true)
     private LocalDateTime lastLoginAt;
+
+    // ── RBAC — groups and direct role assignments ─────────────────────────────
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_group_memberships",
+        joinColumns        = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "group_id")
+    )
+    private Set<UserGroup> groups = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_role_assignments",
+        joinColumns        = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<BankingRole> directRoles = new HashSet<>();
 
     // ── Security / audit ──────────────────────────────────────────────────────
 
