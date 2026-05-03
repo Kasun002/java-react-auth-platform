@@ -13,10 +13,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.shop.auth.dto.AddressDto;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
+import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.entity.Address;
 import com.shop.auth.entity.User;
@@ -154,12 +156,13 @@ public class AuthServiceImpl implements AuthService {
             throw new UserNotActiveException(user.getStatus());
         }
 
-        // Step 5 — reset any prior failure counters on successful authentication
+        // Step 5 — record login time and reset failure counters if needed; always persist
+        user.setLastLoginAt(LocalDateTime.now());
         if (user.getFailedLoginAttempts() > 0 || user.getLockedUntil() != null) {
             user.setFailedLoginAttempts(0);
             user.setLockedUntil(null);
-            userRepository.save(user);
         }
+        userRepository.save(user);
 
         String accessToken  = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
@@ -173,7 +176,7 @@ public class AuthServiceImpl implements AuthService {
         LoginResponseDto response = new LoginResponseDto();
         response.setAccessToken(accessToken);
         response.setRefreshToken(refreshToken);
-        response.setName(user.getName());
+        response.setUser(buildUserDto(user));
         return response;
     }
 
@@ -204,6 +207,37 @@ public class AuthServiceImpl implements AuthService {
                     MaskingUtil.maskEmail(user.getEmail()), attempts, lockUntil);
         }
         userRepository.save(user);
+    }
+
+    private UserDto buildUserDto(User user) {
+        List<AddressDto> addressDtos = user.getAddresses().stream()
+                .map(a -> {
+                    AddressDto dto = new AddressDto();
+                    dto.setAddressLine1(a.getAddressLine1());
+                    dto.setAddressLine2(a.getAddressLine2());
+                    dto.setStreet(a.getStreet());
+                    dto.setPostalCode(a.getPostalCode());
+                    dto.setState(a.getState());
+                    dto.setCountry(a.getCountry());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+
+        UserDto dto = new UserDto();
+        dto.setId(user.getId());
+        dto.setName(user.getName());
+        dto.setEmail(user.getEmail());
+        dto.setPhone(user.getPhone());
+        dto.setStatus(user.getStatus());
+        dto.setRole(user.getRole());
+        dto.setDateOfBirth(user.getDateOfBirth());
+        dto.setGender(user.getGender());
+        dto.setProfilePictureUrl(user.getProfilePictureUrl());
+        dto.setLastLoginAt(user.getLastLoginAt());
+        dto.setCreatedAt(user.getCreatedAt());
+        dto.setUpdatedAt(user.getUpdatedAt());
+        dto.setAddresses(addressDtos);
+        return dto;
     }
 
     private void persistUserLog(User user, String token, TokenType tokenType) {

@@ -1,9 +1,11 @@
 package com.shop.auth.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.shop.auth.utils.Gender;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 
@@ -66,6 +68,24 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = true)
     private Role role;
+
+    // ── Optional profile fields ───────────────────────────────────────────────
+
+    @Column(nullable = true)
+    private LocalDate dateOfBirth;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true)
+    private Gender gender;
+
+    @Column(nullable = true, length = 1024)
+    private String profilePictureUrl;
+
+    /** Timestamp of the last successful login — updated on every login. */
+    @Column(nullable = true)
+    private LocalDateTime lastLoginAt;
+
+    // ── Security / audit ──────────────────────────────────────────────────────
 
     @Column(nullable = false)
     private int failedLoginAttempts = 0;
