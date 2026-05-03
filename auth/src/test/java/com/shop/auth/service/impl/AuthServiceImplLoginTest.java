@@ -73,6 +73,7 @@ class AuthServiceImplLoginTest {
         when(jwtService.generateAccessToken(activeUser)).thenReturn("access.token.value");
         when(jwtService.generateRefreshToken(activeUser)).thenReturn("refresh.token.value");
         when(jwtService.extractExpiration(anyString())).thenReturn(new Date(System.currentTimeMillis() + 900_000));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -112,7 +113,23 @@ class AuthServiceImplLoginTest {
 
             LoginResponseDto response = authService.login(request);
 
-            assertThat(response.getName()).isEqualTo("John Doe");
+            assertThat(response.getUser().getName()).isEqualTo("John Doe");
+        }
+
+        @Test
+        @DisplayName("Should set lastLoginAt on the user record on every successful login")
+        void shouldSetLastLoginAt() {
+            LoginRequestDto request = LoginRequestDtoFixture.valid();
+            stubHappyPath(request);
+
+            authService.login(request);
+
+            ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(captor.capture());
+            assertThat(captor.getValue().getLastLoginAt())
+                    .as("lastLoginAt must be set on successful login")
+                    .isNotNull()
+                    .isBeforeOrEqualTo(LocalDateTime.now());
         }
 
         @Test
@@ -376,15 +393,16 @@ class AuthServiceImplLoginTest {
         }
 
         @Test
-        @DisplayName("Should not call userRepository.save on success when counter is already zero")
-        void shouldNotSaveUserWhenCounterAlreadyZero() {
+        @DisplayName("Should always save user on success — updates lastLoginAt even when counter is already zero")
+        void shouldSaveUserOnSuccessToUpdateLastLoginAt() {
             LoginRequestDto request = LoginRequestDtoFixture.valid();
             // activeUser has failedLoginAttempts=0 and lockedUntil=null by default
             stubHappyPath(request);
 
             authService.login(request);
 
-            verify(userRepository, never()).save(any(User.class));
+            // save is always called — at minimum to persist lastLoginAt
+            verify(userRepository, times(1)).save(any(User.class));
         }
     }
 }

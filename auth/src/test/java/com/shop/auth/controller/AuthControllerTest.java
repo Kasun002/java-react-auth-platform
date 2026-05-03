@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shop.auth.dto.LoginRequestDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
+import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.exception.EmailAlreadyExistsException;
@@ -264,12 +265,16 @@ class AuthControllerTest {
     class LoginSuccess {
 
         @Test
-        @DisplayName("Should return 200 OK with tokens and user name on valid credentials")
+        @DisplayName("Should return 200 OK with tokens and user profile on valid credentials")
         void shouldReturn200WithTokens() throws Exception {
+            UserDto userDto = new UserDto();
+            userDto.setName("John Doe");
+            userDto.setEmail("john.doe@example.com");
+
             LoginResponseDto loginResponse = new LoginResponseDto();
             loginResponse.setAccessToken("access.token.value");
             loginResponse.setRefreshToken("refresh.token.value");
-            loginResponse.setName("John Doe");
+            loginResponse.setUser(userDto);
 
             when(authService.login(any(LoginRequestDto.class))).thenReturn(loginResponse);
 
@@ -281,7 +286,8 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value("Login successful"))
                 .andExpect(jsonPath("$.data.accessToken").value("access.token.value"))
                 .andExpect(jsonPath("$.data.refreshToken").value("refresh.token.value"))
-                .andExpect(jsonPath("$.data.name").value("John Doe"));
+                .andExpect(jsonPath("$.data.user.name").value("John Doe"))
+                .andExpect(jsonPath("$.data.user.email").value("john.doe@example.com"));
         }
     }
 
