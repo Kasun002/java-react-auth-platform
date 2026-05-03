@@ -9,11 +9,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;  // local static instance �
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -24,6 +29,10 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import lombok.RequiredArgsConstructor;
 
@@ -39,6 +48,8 @@ import lombok.RequiredArgsConstructor;
  *   <li>{@code @EnableMethodSecurity} activates {@code @PreAuthorize} on controllers
  *       and services (Step 3 onward).</li>
  *   <li>401 and 403 responses are JSON {@link ResponseDto} — never Spring's default HTML.</li>
+ *   <li>Banking-grade HTTP security headers on every response — HSTS, CSP, no-cache,
+ *       no-sniff, no-frame, referrer policy, permissions policy.</li>
  * </ul>
  * </p>
  */
@@ -50,16 +61,35 @@ public class SecurityConfig {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    /** Comma-separated list of allowed origins — must be explicit in production (no wildcards). */
+    @Value("${app.cors.allowed-origins}")
+    private List<String> allowedOrigins;
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .headers(headers -> headers
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .maxAgeInSeconds(31_536_000)   // 1 year
+                    .includeSubDomains(true)
+                    .preload(true))
+                .frameOptions(frame -> frame.deny())
+                .contentTypeOptions(Customizer.withDefaults())
+                .cacheControl(Customizer.withDefaults())
+                .contentSecurityPolicy(csp -> csp
+                    .policyDirectives("default-src 'none'; frame-ancestors 'none'"))
+                .referrerPolicy(referrer -> referrer
+                    .policy(ReferrerPolicy.NO_REFERRER))
+                .permissionsPolicyHeader(permissions -> permissions
+                    .policy("camera=(), microphone=(), geolocation=(), payment=()")))
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint(jwtAuthenticationEntryPoint())
                 .accessDeniedHandler(jwtAccessDeniedHandler()))
@@ -92,6 +122,42 @@ public class SecurityConfig {
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    // ── CORS ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Explicit CORS policy — origins are read from {@code app.cors.allowed-origins}
+     * so they can be locked down per environment without a code change.
+     *
+     * <p>Rules applied:
+     * <ul>
+     *   <li>Origins — only the configured list; wildcards are never permitted.</li>
+     *   <li>Methods — standard REST verbs plus {@code OPTIONS} for preflight.</li>
+     *   <li>Headers — {@code Authorization} (JWT Bearer) and {@code Content-Type}.</li>
+     *   <li>Credentials — {@code true} so the browser sends the Authorization header.</li>
+     *   <li>Preflight cache — 30 minutes to avoid excess OPTIONS traffic.</li>
+     * </ul>
+     * </p>
+     */
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedMethods(List.of(
+                HttpMethod.GET.name(),
+                HttpMethod.POST.name(),
+                HttpMethod.PUT.name(),
+                HttpMethod.PATCH.name(),
+                HttpMethod.DELETE.name(),
+                HttpMethod.OPTIONS.name()));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(1_800L); // 30 minutes preflight cache
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     // ── 401 / 403 JSON response handlers ─────────────────────────────────────
