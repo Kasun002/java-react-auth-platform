@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import com.shop.auth.exception.AccountLockedException;
 import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.exception.InvalidCredentialsException;
 import com.shop.auth.exception.InvalidTokenException;
+import com.shop.auth.exception.PasswordExpiredException;
 import com.shop.auth.exception.UserNotActiveException;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
@@ -37,6 +39,7 @@ import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.OtpService;
+import com.shop.auth.service.PasswordPolicyService;
 import com.shop.auth.service.TokenBlacklistService;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
@@ -63,6 +66,9 @@ public class AuthServiceImpl implements AuthService {
     private static final String DUMMY_BCRYPT_HASH =
             "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
+    @Value("${app.security.password.max-age-days:90}")
+    private int passwordMaxAgeDays;
+
     private final UserRepository        userRepository;
     private final UserGroupRepository   userGroupRepository;
     private final UserLogRepository     userLogRepository;
@@ -70,6 +76,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService            jwtService;
     private final OtpService            otpService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final PasswordPolicyService passwordPolicyService;
 
     // ── Register ─────────────────────────────────────────────────────────────
 
@@ -86,12 +93,15 @@ public class AuthServiceImpl implements AuthService {
                 MaskingUtil.maskEmail(request.getEmail()), request.getRole());
 
         User user = new User();
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setPhone(request.getPhone());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPassword(encodedPassword);
         user.setStatus(UserStatus.NEW);
         user.setRole(request.getRole() != null ? request.getRole() : Role.USER);
+        user.setPasswordChangedAt(LocalDateTime.now());
 
         List<Address> addresses = request.getAddresses().stream()
                 .map(dto -> {
@@ -113,6 +123,9 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         log.info("User persisted successfully — email=[{}] status=[{}] role=[{}]",
                 MaskingUtil.maskEmail(user.getEmail()), user.getStatus(), user.getRole());
+
+        // Seed password history so future change-password can enforce no-reuse from day one
+        passwordPolicyService.recordPasswordChange(user, encodedPassword);
 
         // Auto-assign new users to the default RETAIL_CUSTOMER group (PCI-DSS Req 7.2 — least privilege)
         userGroupRepository.findByName("RETAIL_CUSTOMER").ifPresentOrElse(
@@ -177,7 +190,15 @@ public class AuthServiceImpl implements AuthService {
             throw new UserNotActiveException(user.getStatus());
         }
 
-        // Step 5 — record login time and reset failure counters if needed; always persist
+        // Step 5 — enforce password age (PCI-DSS Req 8.3.9 — max 90 days)
+        if (user.getPasswordChangedAt() != null
+                && user.getPasswordChangedAt().isBefore(LocalDateTime.now().minusDays(passwordMaxAgeDays))) {
+            log.warn("Login rejected — password expired: email=[{}] passwordChangedAt=[{}]",
+                    MaskingUtil.maskEmail(user.getEmail()), user.getPasswordChangedAt());
+            throw new PasswordExpiredException(passwordMaxAgeDays);
+        }
+
+        // Step 6 — record login time and reset failure counters if needed; always persist
         user.setLastLoginAt(LocalDateTime.now());
         if (user.getFailedLoginAttempts() > 0 || user.getLockedUntil() != null) {
             user.setFailedLoginAttempts(0);

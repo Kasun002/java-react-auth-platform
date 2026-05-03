@@ -116,6 +116,14 @@ public class User {
     @Column(nullable = true)
     private LocalDateTime lockedUntil;
 
+    /**
+     * Timestamp of the most recent password change.
+     * Set on registration and on every successful password change.
+     * Used to enforce mandatory password rotation (PCI-DSS Req 8.3.9).
+     */
+    @Column(nullable = false)
+    private LocalDateTime passwordChangedAt = LocalDateTime.now();
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

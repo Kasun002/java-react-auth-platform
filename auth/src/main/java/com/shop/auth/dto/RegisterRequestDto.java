@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.shop.auth.utils.Role;
+import com.shop.auth.validation.StrongPassword;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -32,9 +33,13 @@ public class RegisterRequestDto {
     @Size(max = 50, message = "Phone number must be at most 50 characters")
     private String phone;
 
-    @Schema(description = "Password — minimum 8 characters", example = "Secret@123", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(
+        description = "Password — min 12 chars, must include uppercase, lowercase, digit, and special character (PCI-DSS 8.3.6)",
+        example = "Secure@Pass1!",
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
     @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
+    @StrongPassword
     private String password;
 
     @Schema(description = "At least one address is required", requiredMode = Schema.RequiredMode.REQUIRED)
