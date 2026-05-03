@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.shop.auth.utils.Role;
-import com.shop.auth.utils.UserStatus;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -43,10 +42,6 @@ public class RegisterRequestDto {
     @NotNull(message = "Addresses list is required")
     @Size(min = 1, message = "At least one address is required")
     private List<AddressDto> addresses = new ArrayList<>();
-
-    @Schema(description = "Initial user status", example = "NEW", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotNull(message = "Status is required")
-    private UserStatus status;
 
     @Schema(description = "User role — defaults to USER if omitted", example = "USER")
     private Role role;

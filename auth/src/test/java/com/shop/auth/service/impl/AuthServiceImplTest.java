@@ -8,10 +8,10 @@ import com.shop.auth.entity.User;
 import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.fixtures.AddressDtoFixture;
 import com.shop.auth.fixtures.RegisterRequestDtoFixture;
+import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.utils.Role;
-import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -41,9 +41,10 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 class AuthServiceImplTest {
 
-    @Mock private UserRepository  userRepository;
-    @Mock private PasswordEncoder passwordEncoder;
-    @Mock private OtpService      otpService;        // void mock — silently does nothing, no stub needed
+    @Mock private UserRepository      userRepository;
+    @Mock private UserGroupRepository userGroupRepository;
+    @Mock private PasswordEncoder     passwordEncoder;
+    @Mock private OtpService          otpService;    // void mock — silently does nothing, no stub needed
     @InjectMocks private AuthServiceImpl authService;
 
     // ── Helper ──────────────────────────────────────────────────────────────
@@ -186,27 +187,6 @@ class AuthServiceImplTest {
             authService.register(request);
 
             assertThat(capturePersistedUser().getRole()).isEqualTo(Role.ADMIN);
-        }
-    }
-
-    // ── Status enforcement ───────────────────────────────────────────────────
-
-    @Nested
-    @DisplayName("Status enforcement")
-    class StatusEnforcement {
-
-        @Test
-        @DisplayName("Should always set status to NEW — client cannot control initial status")
-        void shouldAlwaysSetStatusToNew() {
-            // Even if client sends ACTIVE, the service must override it with NEW
-            RegisterRequestDto request = RegisterRequestDtoFixture.withStatus(UserStatus.ACTIVE);
-            stubHappyPath(request);
-
-            authService.register(request);
-
-            assertThat(capturePersistedUser().getStatus())
-                .as("Service must enforce NEW status regardless of client input")
-                .isEqualTo(UserStatus.NEW);
         }
     }
 

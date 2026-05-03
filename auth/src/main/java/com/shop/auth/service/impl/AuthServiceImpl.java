@@ -27,6 +27,7 @@ import com.shop.auth.exception.AccountLockedException;
 import com.shop.auth.exception.EmailAlreadyExistsException;
 import com.shop.auth.exception.InvalidCredentialsException;
 import com.shop.auth.exception.UserNotActiveException;
+import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuthService;
@@ -57,11 +58,12 @@ public class AuthServiceImpl implements AuthService {
     private static final String DUMMY_BCRYPT_HASH =
             "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
-    private final UserRepository    userRepository;
-    private final UserLogRepository userLogRepository;
-    private final PasswordEncoder   passwordEncoder;
-    private final JwtService        jwtService;
-    private final OtpService        otpService;
+    private final UserRepository      userRepository;
+    private final UserGroupRepository userGroupRepository;
+    private final UserLogRepository   userLogRepository;
+    private final PasswordEncoder     passwordEncoder;
+    private final JwtService          jwtService;
+    private final OtpService          otpService;
 
     // ── Register ─────────────────────────────────────────────────────────────
 
@@ -105,6 +107,18 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
         log.info("User persisted successfully — email=[{}] status=[{}] role=[{}]",
                 MaskingUtil.maskEmail(user.getEmail()), user.getStatus(), user.getRole());
+
+        // Auto-assign new users to the default RETAIL_CUSTOMER group (PCI-DSS Req 7.2 — least privilege)
+        userGroupRepository.findByName("RETAIL_CUSTOMER").ifPresentOrElse(
+                group -> {
+                    user.getGroups().add(group);
+                    userRepository.save(user);
+                    log.info("Auto-assigned RETAIL_CUSTOMER group to email=[{}]",
+                            MaskingUtil.maskEmail(user.getEmail()));
+                },
+                () -> log.warn("RETAIL_CUSTOMER group not found — user registered without default group: email=[{}]",
+                        MaskingUtil.maskEmail(user.getEmail()))
+        );
 
         // OTP runs in REQUIRES_NEW — failure does not roll back the committed user record
         try {
