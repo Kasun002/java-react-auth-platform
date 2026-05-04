@@ -30,46 +30,147 @@
 ## 1. Architecture Overview
 
 ```
-Client
-  │
-  ▼
-[JwtAuthenticationFilter]           ← 6-step validation: sig/expiry, token type,
-  │                                   JTI blacklist, user-level invalidation, UserPrincipal
-  ▼
-AuthController                      ← POST /auth/** (public + protected)
-AdminController                     ← GET|POST|DELETE /admin/** (@PreAuthorize on each method)
-  │
-  ├── AuthService / AuthServiceImpl  ← register, login, verifyOtp, resendOtp,
-  │       │                            refresh, logout, changePassword,
-  │       │                            forgotPassword, resetPassword
-  │       │
-  │       ├── OtpService / OtpServiceImpl   ← OTP lifecycle: generate, verify, resend
-  │       │       ├── OtpVerificationRepository  (JPA + pessimistic locks)
-  │       │       ├── UserRepository
-  │       │       ├── OtpEmailPublisher / OtpEmailPublisherImpl  ← publishes to SQS
-  │       │       └── OtpRateLimitService / OtpRateLimitServiceImpl  ← Redis INCR+EXPIRE
-  │       │
-  │       ├── JwtService / JwtServiceImpl   ← Token creation, validation, claims extraction
-  │       │                                   (extractJti, extractIssuedAt added for revocation)
-  │       ├── TokenBlacklistService / TokenBlacklistServiceImpl
-  │       │       ├── Per-token: blacklist(jti, ttl)  ← Redis key: blacklist:jti:<jti>
-  │       │       └── User-level: invalidateAllUserTokens(userId, ttl)
-  │       │                       ← Redis key: user:tokens:invalidated:<userId>
-  │       ├── PasswordPolicyService / PasswordPolicyServiceImpl
-  │       │       ├── enforceHistory(user, plainPassword)  ← checks last 12 BCrypt hashes
-  │       │       └── recordPasswordChange(user, encodedPassword)  ← prunes old entries
-  │       ├── EmailService / EmailServiceImpl  ← Spring Mail (SMTP) for password reset emails
-  │       ├── UserGroupRepository            ← Auto-assign RETAIL_CUSTOMER on registration
-  │       └── UserRepository, UserLogRepository, PasswordHistoryRepository, PasswordEncoder
-  │
-  ├── [OtpEmailConsumer]             ← Java 21 virtual thread; polls SQS (long-poll 20s);
-  │       └── SesClient              delivers via AWS SES; stale-message guard; auto-provisions queue
-  │
-  ├── PermissionService / PermissionServiceImpl   ← List all permissions
-  ├── BankingRoleService / BankingRoleServiceImpl ← Role CRUD, assign/remove permissions
-  ├── UserGroupService / UserGroupServiceImpl     ← Group CRUD, user membership, effective permissions
-  │
-  └── GlobalExceptionHandler         ← Centralised error responses
+flowchart TD
+
+%% ========== Client & Security ==========
+Client --> JwtAuthenticationFilter
+
+JwtAuthenticationFilter["JwtAuthenticationFilter\n- Sig & Expiry\n- Token Type\n- JTI Blacklist\n- User-level Invalidation\n- UserPrincipal"]
+
+class JwtAuthenticationFilter security
+
+%% ========== Controllers ==========
+JwtAuthenticationFilter --> AuthController
+JwtAuthenticationFilter --> AdminController
+
+AuthController["AuthController\nPOST /auth/**"]
+AdminController["AdminController\nGET|POST|DELETE /admin/**"]
+
+class AuthController,AdminController controller
+
+%% ========== Auth Service ==========
+AuthController --> AuthService
+AdminController --> AuthService
+
+subgraph Auth_Layer
+  AuthService["AuthService / Impl\nregister | login | OTP | refresh | logout | password flows"]
+end
+
+class AuthService service
+
+%% ========== OTP ==========
+subgraph OTP_Module
+  OtpService["OtpService"]
+  OtpRepo["OtpVerificationRepository\n(JPA + locks)"]
+  UserRepo["UserRepository"]
+  OtpPublisher["OtpEmailPublisher (SQS)"]
+  OtpRateLimit["OtpRateLimit (Redis)"]
+
+  OtpService --> OtpRepo
+  OtpService --> UserRepo
+  OtpService --> OtpPublisher
+  OtpService --> OtpRateLimit
+end
+
+class OtpService service
+class OtpRepo,UserRepo repository
+class OtpPublisher async
+class OtpRateLimit cache
+
+%% ========== Token ==========
+subgraph Token_Management
+  JwtService["JwtService"]
+  TokenBlacklist["TokenBlacklistService"]
+  Redis["Redis\nblacklist + user invalidation"]
+
+  TokenBlacklist --> Redis
+end
+
+class JwtService,TokenBlacklist service
+class Redis cache
+
+%% ========== Password ==========
+subgraph Password_Policy
+  PasswordPolicy["PasswordPolicyService"]
+  PasswordHistoryRepo["PasswordHistoryRepository"]
+
+  PasswordPolicy --> PasswordHistoryRepo
+end
+
+class PasswordPolicy service
+class PasswordHistoryRepo repository
+
+%% ========== Email ==========
+subgraph Email
+  EmailService["EmailService (SMTP)"]
+end
+
+class EmailService service
+
+%% ========== Persistence ==========
+subgraph Persistence
+  UserLogRepo["UserLogRepository"]
+  UserGroupRepo["UserGroupRepository"]
+  PasswordEncoder["PasswordEncoder"]
+end
+
+class UserLogRepo,UserGroupRepo repository
+class PasswordEncoder util
+
+%% ========== Wiring ==========
+AuthService --> OtpService
+AuthService --> JwtService
+AuthService --> TokenBlacklist
+AuthService --> PasswordPolicy
+AuthService --> EmailService
+AuthService --> UserRepo
+AuthService --> UserLogRepo
+AuthService --> UserGroupRepo
+AuthService --> PasswordEncoder
+
+%% ========== Async ==========
+subgraph Async_Processing
+  OtpConsumer["OtpEmailConsumer\nVirtual Threads\nSQS long poll"]
+  SES["AWS SES"]
+
+  OtpConsumer --> SES
+end
+
+OtpPublisher --> OtpConsumer
+
+class OtpConsumer async
+class SES external
+
+%% ========== Admin ==========
+subgraph Authorization
+  PermissionService["PermissionService"]
+  RoleService["BankingRoleService"]
+  GroupService["UserGroupService"]
+end
+
+AdminController --> PermissionService
+AdminController --> RoleService
+AdminController --> GroupService
+
+class PermissionService,RoleService,GroupService service
+
+%% ========== Exception ==========
+GlobalExceptionHandler["GlobalExceptionHandler"]
+
+AuthController --> GlobalExceptionHandler
+AdminController --> GlobalExceptionHandler
+
+class GlobalExceptionHandler util
+
+%% ========== Styles ==========
+classDef controller fill:#4CAF50,stroke:#2E7D32,color:#fff
+classDef service fill:#2196F3,stroke:#1565C0,color:#fff
+classDef repository fill:#FF9800,stroke:#E65100,color:#fff
+classDef async fill:#9C27B0,stroke:#6A1B9A,color:#fff
+classDef cache fill:#00BCD4,stroke:#00838F,color:#fff
+classDef security fill:#F44336,stroke:#B71C1C,color:#fff
+classDef util fill:#607D8B,stroke:#37474F,color:#fff
+classDef external fill:#795548,stroke:#3E2723,color:#fff
 ```
 
 All business exceptions extend `BusinessException` which carries an `HttpStatus`.
