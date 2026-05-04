@@ -451,74 +451,91 @@ class L,M,N async
 
 ### 5.1 Verify (`POST /auth/verify-otp`)
 
-```
-[Input validation] @Pattern(\\d{6}) on otp field
-        │
-        ▼
-  userRepository.findByEmail(email)
-        │  ── not found ──► OtpInvalidException (same as wrong OTP — prevents enumeration)
-        │
-        ▼
-  [Status guard]
-        ├── ACTIVE   → return silently (idempotent)
-        └── != NEW   → OtpInvalidException
-        │
-        ▼
-  findTopByUserAndUsedFalseOrderByCreatedAtDesc(user)
-  [PESSIMISTIC_WRITE LOCK — prevents concurrent race on attempt counter]
-        │  ── no record ──► OtpExpiredException
-        │
-        ▼
-  [Expiry check] LocalDateTime.now().isAfter(record.expiresAt)
-        │  ── expired ──► OtpExpiredException
-        │
-        ▼
-  [Attempt guard] record.attempts >= maxAttempts (3)
-        │  ── limit hit ──► OtpMaxAttemptsException
-        │
-        ▼
-  [Increment + save attempts BEFORE comparing hash]
-  record.attempts++  →  otpVerificationRepository.save(record)
-  [noRollbackFor=BusinessException ensures this counter commit survives a mismatch exception]
-        │
-        ▼
-  [Constant-time hash comparison]
-  MessageDigest.isEqual(
-      sha256Hex(submittedOtp).getBytes(UTF-8),
-      record.otpHash.getBytes(UTF-8)
-  )
-        │  ── mismatch ──► OtpInvalidException
-        │
-        ▼
-  record.used = true
-  user.status = ACTIVE
-  save both
-        │
-        ▼
-  200 OK  { status: SUCCESS, message: "Account verified successfully. You can now log in." }
+```mermaid
+flowchart TD
+
+%% Start
+A["Verify OTP Request"] --> B["@Pattern(\\d{6})\nValidate OTP format"]
+
+%% User lookup
+B --> C["Find user by email"]
+C --> D{"User exists?"}
+D -- No --> X1["OtpInvalidException\n(prevents enumeration)"]
+D -- Yes --> E["Check user status"]
+
+%% Status guard
+E --> F{"User status"}
+F -- ACTIVE --> S1["Return silently\n(idempotent)"]
+F -- NOT NEW --> X2["OtpInvalidException"]
+F -- NEW --> G["Fetch latest unused OTP\n(PESSIMISTIC_WRITE LOCK)"]
+
+%% OTP record
+G --> H{"OTP record exists?"}
+H -- No --> X3["OtpExpiredException"]
+H -- Yes --> I["Check expiry"]
+
+%% Expiry
+I --> J{"Expired?"}
+J -- Yes --> X4["OtpExpiredException"]
+J -- No --> K["Check attempt count"]
+
+%% Attempts
+K --> L{"Attempts >= 3?"}
+L -- Yes --> X5["OtpMaxAttemptsException"]
+L -- No --> M["Increment attempts\nand save"]
+
+%% Hash comparison
+M --> N["Constant-time compare\nSHA-256(submitted) vs stored hash"]
+N --> O{"Match?"}
+O -- No --> X6["OtpInvalidException"]
+O -- Yes --> P["Mark OTP used\nSet user ACTIVE"]
+
+%% Persist success
+P --> Q["Save user + OTP"]
+Q --> R["200 OK\nAccount verified successfully"]
+
+%% Styling
+classDef success fill:#4CAF50,color:#fff
+classDef error fill:#F44336,color:#fff
+classDef process fill:#2196F3,color:#fff
+classDef guard fill:#FF9800,color:#fff
+
+class R,S1 success
+class X1,X2,X3,X4,X5,X6 error
+class A,B,C,E,G,I,K,M,N,P,Q process
+class D,F,H,J,L,O guard
 ```
 
 ### 5.2 Resend (`POST /auth/resend-otp`)
 
-```
-  userRepository.findByEmail(email)
-        │  ── not found ──► OtpInvalidException
-        │
-        ▼
-  [Status guard]
-        ├── ACTIVE  → return silently
-        └── != NEW  → OtpInvalidException
-        │
-        ▼
-  [Redis rate limit] otpRateLimitService.checkAndIncrementResend(userId, maxPerHour)
-  Key: otp:resend:<userId> — atomic INCR + EXPIRE 1h on first call
-        │  ── count > 3 ──► OtpResendLimitException
-        │
-        ▼
-  generateAndSend(user)    [see Registration Flow — same internals]
-        │
-        ▼
-  200 OK  { status: SUCCESS, message: "OTP resent successfully. Please check your email." }
+```mermaid
+flowchart TD
+
+A["Find user by email"] --> B{"User exists?"}
+
+B -- No --> X1["OtpInvalidException"]
+B -- Yes --> C{"User status"}
+
+C -- ACTIVE --> S1["Return silently (idempotent)"]
+C -- NOT NEW --> X2["OtpInvalidException"]
+C -- NEW --> D["Redis rate limit\ncheckAndIncrementResend()"]
+
+D --> E{"Count > 3 per hour?"}
+E -- Yes --> X3["OtpResendLimitException"]
+E -- No --> F["generateAndSend(user)"]
+
+F --> G["200 OK\nOTP resent successfully"]
+
+%% Styling
+classDef success fill:#4CAF50,color:#fff
+classDef error fill:#F44336,color:#fff
+classDef process fill:#2196F3,color:#fff
+classDef guard fill:#FF9800,color:#fff
+
+class G,S1 success
+class X1,X2,X3 error
+class A,C,D,F process
+class B,E guard
 ```
 
 ---
@@ -589,36 +606,64 @@ POST /auth/login
 
 ### 7.1 Refresh (`POST /auth/refresh`) — Refresh Token Rotation
 
-```
-  [Validation] @NotBlank on refreshToken field
-        │
-        ▼
-  Step 1: jwtService.isTokenValid(token)
-        │  ── false ──► 401 InvalidTokenException
-        │
-        ▼
-  Step 2: extractTokenType(token) != "REFRESH"
-        │  ── wrong type ──► 401 InvalidTokenException
-        │
-        ▼
-  Step 3: tokenBlacklistService.isBlacklisted(jti)
-        │  ── blacklisted ──► 401 InvalidTokenException
-        │  (replay attack detection — token already consumed or revoked)
-        │
-        ▼
-  Step 4: userRepository.findByEmail(subject) + user.status != ACTIVE
-        │  ── not found / not active ──► 401 InvalidTokenException
-        │
-        ▼
-  Generate new accessToken + new refreshToken
-  persistUserLog for both new tokens
-        │
-        ▼
-  [Rotate] tokenBlacklistService.blacklist(oldRefreshJti, remainingTtl)
-  Old refresh token is now permanently revoked — single-use enforced
-        │
-        ▼
-  200 OK  { accessToken: "<new>", refreshToken: "<new>" }
+```mermaid
+flowchart TD
+
+A["POST /auth/login"] --> B["@Valid LoginRequestDto"]
+
+%% Step 1
+B --> C["Find user by email"]
+C --> D{"User exists?"}
+
+D -- No --> X1["PasswordEncoder.matches(dummy_hash)\nTIMING EQUALIZER"]
+X1 --> X2["401 InvalidCredentialsException"]
+
+D -- Yes --> E["Check lock status"]
+
+%% Lock check
+E --> F{"Account locked?"}
+F -- Yes --> X3["401 AccountLockedException\n(lock expiry included)"]
+F -- No --> G["Check password"]
+
+%% Password check
+G --> H{"Password matches?"}
+H -- No --> I["recordFailedAttempt()"]
+I --> J{"Attempts >= 5?"}
+J -- Yes --> K["Set lockedUntil = now + 30 min"]
+J -- No --> X4["401 InvalidCredentialsException"]
+K --> X4
+
+H -- Yes --> L["Check user status"]
+
+%% Status check
+L --> M{"Status == ACTIVE?"}
+M -- No --> X5["403 UserNotActiveException"]
+M -- Yes --> N["Password age check\n(90 days PCI-DSS)"]
+
+%% Password age
+N --> O{"Password expired?"}
+O -- Yes --> X6["403 PasswordExpiredException"]
+O -- No --> P["Finalize login"]
+
+%% Success path
+P --> Q["Update lastLoginAt\nReset failed attempts & lock"]
+Q --> R["Generate Access Token (15m)\n+ Refresh Token (7d)"]
+R --> S["Persist User Log\nSHA-256 + IP + UA"]
+S --> T["Build UserDto"]
+
+T --> U["200 OK\naccessToken + refreshToken + user"]
+
+%% Styling
+classDef success fill:#4CAF50,color:#fff
+classDef error fill:#F44336,color:#fff
+classDef process fill:#2196F3,color:#fff
+classDef guard fill:#FF9800,color:#fff
+classDef security fill:#9C27B0,color:#fff
+
+class U success
+class X1,X2,X3,X4,X5,X6 error
+class A,B,C,E,G,I,K,L,N,P,Q,R,S,T process
+class D,F,H,J,M,O guard
 ```
 
 ### 7.2 Logout (`POST /auth/logout`)
