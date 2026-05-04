@@ -9,6 +9,7 @@ import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.entity.User;
 import com.shop.auth.exception.AccountLockedException;
 import com.shop.auth.exception.InvalidCredentialsException;
+import com.shop.auth.exception.PasswordExpiredException;
 import com.shop.auth.exception.UserNotActiveException;
 import com.shop.auth.fixtures.LoginRequestDtoFixture;
 import com.shop.auth.repository.UserLogRepository;
@@ -33,6 +34,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -64,6 +66,7 @@ class AuthServiceImplLoginTest {
         activeUser.setPassword("$2a$10$hashed");
         activeUser.setStatus(UserStatus.ACTIVE);
         activeUser.setRole(Role.USER);
+        activeUser.setPasswordChangedAt(null); // User entity initialises this to now(); null skips age check
     }
 
     /** Stubs for the full happy-path flow. */
@@ -403,6 +406,52 @@ class AuthServiceImplLoginTest {
 
             // save is always called — at minimum to persist lastLoginAt
             verify(userRepository, times(1)).save(any(User.class));
+        }
+    }
+
+    // ── Password age enforcement — PCI-DSS Req 8.3.9 ─────────────────────────
+
+    @Nested
+    @DisplayName("Password age enforcement — PCI-DSS Req 8.3.9")
+    class PasswordAgeEnforcement {
+
+        @Test
+        @DisplayName("Should throw PasswordExpiredException when password has exceeded the maximum age")
+        void shouldThrowWhenPasswordIsExpired() {
+            LoginRequestDto request = LoginRequestDtoFixture.valid();
+            // passwordMaxAgeDays defaults to 0 in @InjectMocks — any past date satisfies isBefore(now())
+            activeUser.setPasswordChangedAt(LocalDateTime.now().minusDays(1));
+            when(userRepository.findByEmail(request.getUsername())).thenReturn(Optional.of(activeUser));
+            when(passwordEncoder.matches(request.getPassword(), activeUser.getPassword())).thenReturn(true);
+
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(PasswordExpiredException.class)
+                    .hasMessageContaining("password");
+        }
+
+        @Test
+        @DisplayName("Should never issue tokens when password is expired")
+        void shouldNeverIssueTokensOnExpiredPassword() {
+            LoginRequestDto request = LoginRequestDtoFixture.valid();
+            activeUser.setPasswordChangedAt(LocalDateTime.now().minusDays(1));
+            when(userRepository.findByEmail(request.getUsername())).thenReturn(Optional.of(activeUser));
+            when(passwordEncoder.matches(request.getPassword(), activeUser.getPassword())).thenReturn(true);
+
+            assertThatThrownBy(() -> authService.login(request))
+                    .isInstanceOf(PasswordExpiredException.class);
+
+            verify(jwtService, never()).generateAccessToken(any());
+            verify(userLogRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Should skip password age check when passwordChangedAt is null — guard for rows before V14")
+        void shouldSkipCheckWhenPasswordChangedAtIsNull() {
+            LoginRequestDto request = LoginRequestDtoFixture.valid();
+            // activeUser.passwordChangedAt is null — no age check triggered
+            stubHappyPath(request);
+
+            assertThatNoException().isThrownBy(() -> authService.login(request));
         }
     }
 }

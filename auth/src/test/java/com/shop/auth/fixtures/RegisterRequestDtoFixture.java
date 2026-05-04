@@ -21,7 +21,7 @@ public final class RegisterRequestDtoFixture {
         dto.setName("John Doe");
         dto.setEmail("john.doe@example.com");
         dto.setPhone("+94771234567");
-        dto.setPassword("Secret@123");
+        dto.setPassword("Secret@Pass1!");
         dto.setAddresses(new ArrayList<>(List.of(AddressDtoFixture.valid())));
         dto.setRole(Role.USER);
         return dto;

@@ -1,6 +1,11 @@
 package com.shop.auth.filter;
 
+import java.util.Date;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -205,11 +210,16 @@ class JwtAuthenticationFilterTest {
             when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
             when(jwtService.extractJti(VALID_TOKEN)).thenReturn("test-jti-uuid");
             when(tokenBlacklistService.isBlacklisted("test-jti-uuid")).thenReturn(false);
-            when(jwtService.extractUsername(VALID_TOKEN)).thenReturn("john@example.com");
+            // Step 4 — user-level session invalidation check
             when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(42L);
-            when(jwtService.extractPermissions(VALID_TOKEN))
+            when(jwtService.extractIssuedAt(VALID_TOKEN)).thenReturn(new Date());
+            when(tokenBlacklistService.isUserTokensInvalidated(eq(42L), any())).thenReturn(false);
+            // Steps 1–4 always run; Step 6 (user extraction) is skipped when auth is pre-populated.
+            // Mark as lenient so shouldNotOverwriteExistingAuthentication does not flag unused stubs.
+            lenient().when(jwtService.extractUsername(VALID_TOKEN)).thenReturn("john@example.com");
+            lenient().when(jwtService.extractPermissions(VALID_TOKEN))
                     .thenReturn(List.of("ACCOUNT_VIEW", "TRANSACTION_VIEW"));
-            when(jwtService.extractGroups(VALID_TOKEN)).thenReturn(List.of("RETAIL_CUSTOMER"));
+            lenient().when(jwtService.extractGroups(VALID_TOKEN)).thenReturn(List.of("RETAIL_CUSTOMER"));
         }
 
         @Test
@@ -270,12 +280,53 @@ class JwtAuthenticationFilterTest {
                     .UsernamePasswordAuthenticationToken("existing", null, List.of());
             SecurityContextHolder.getContext().setAuthentication(existingAuth);
 
-            // Reset stubs — token will be valid but context already set
+            // Steps 1–4 still execute; Step 5 sees existing auth and returns early without Step 6
             filter.doFilterInternal(request, response, filterChain);
 
             var auth = SecurityContextHolder.getContext().getAuthentication();
             assertThat(auth.getPrincipal()).isEqualTo("existing");
             verify(filterChain).doFilter(request, response);
+        }
+    }
+
+    // ── User-level session invalidation (Step 4) ──────────────────────────────
+
+    @Nested
+    @DisplayName("User-level session invalidation")
+    class UserLevelInvalidation {
+
+        @BeforeEach
+        void stubThroughStep3() {
+            request.addHeader("Authorization", "Bearer " + VALID_TOKEN);
+            when(jwtService.isTokenValid(VALID_TOKEN)).thenReturn(true);
+            when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
+            when(jwtService.extractJti(VALID_TOKEN)).thenReturn("test-jti-uuid");
+            when(tokenBlacklistService.isBlacklisted("test-jti-uuid")).thenReturn(false);
+            when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(42L);
+            when(jwtService.extractIssuedAt(VALID_TOKEN))
+                    .thenReturn(new Date(System.currentTimeMillis() - 300_000)); // issued 5 min ago
+        }
+
+        @Test
+        @DisplayName("Should return 401 when token was issued before a user-level invalidation event — password change")
+        void shouldReturn401WhenSessionInvalidated() throws Exception {
+            when(tokenBlacklistService.isUserTokensInvalidated(eq(42L), any())).thenReturn(true);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(401);
+            verify(filterChain, never()).doFilter(request, response);
+        }
+
+        @Test
+        @DisplayName("Should write FAIL JSON body containing session-invalidated message")
+        void shouldWriteSessionInvalidatedMessage() throws Exception {
+            when(tokenBlacklistService.isUserTokensInvalidated(eq(42L), any())).thenReturn(true);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getContentType()).contains("application/json");
+            assertThat(response.getContentAsString()).contains("Session has been invalidated");
         }
     }
 }

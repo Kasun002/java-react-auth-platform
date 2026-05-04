@@ -1,7 +1,7 @@
 # Auth Service — Full Implementation Reference
 
 > **Project:** fp-be / auth microservice
-> **Stack:** Java 21 · Spring Boot 4.0.6 · PostgreSQL · Flyway · JWT (jjwt 0.12.x) · Spring Mail · Spring Security 6
+> **Stack:** Java 21 · Spring Boot 4.0.6 · PostgreSQL · Flyway · JWT (jjwt 0.12.x) · Spring Mail · Spring Security 6 · Redis 7 · AWS SDK v2 (SQS + SES)
 > **Last updated:** 2026-05-03
 
 ---
@@ -14,14 +14,16 @@
 4. [Registration Flow](#4-registration-flow)
 5. [OTP Verification Flow](#5-otp-verification-flow)
 6. [Login Flow](#6-login-flow)
-7. [JWT Design](#7-jwt-design)
-8. [RBAC Model](#8-rbac-model)
-9. [Security Controls — Banking Standards Audit](#9-security-controls--banking-standards-audit)
-10. [Exception Model](#10-exception-model)
-11. [Configuration Reference](#11-configuration-reference)
-12. [File Map](#12-file-map)
-13. [Test Coverage](#13-test-coverage)
-14. [Known Gaps & Future Work](#14-known-gaps--future-work)
+7. [Token Flows](#7-token-flows)
+8. [Password Management Flows](#8-password-management-flows)
+9. [JWT Design](#9-jwt-design)
+10. [RBAC Model](#10-rbac-model)
+11. [Security Controls — Banking Standards Audit](#11-security-controls--banking-standards-audit)
+12. [Exception Model](#12-exception-model)
+13. [Configuration Reference](#13-configuration-reference)
+14. [File Map](#14-file-map)
+15. [Test Coverage](#15-test-coverage)
+16. [Known Gaps & Future Work](#16-known-gaps--future-work)
 
 ---
 
@@ -31,22 +33,37 @@
 Client
   │
   ▼
-[JwtAuthenticationFilter]           ← OncePerRequestFilter: validates JWT, builds UserPrincipal
-  │
+[JwtAuthenticationFilter]           ← 6-step validation: sig/expiry, token type,
+  │                                   JTI blacklist, user-level invalidation, UserPrincipal
   ▼
-AuthController                      ← POST /auth/** (public — no token required)
+AuthController                      ← POST /auth/** (public + protected)
 AdminController                     ← GET|POST|DELETE /admin/** (@PreAuthorize on each method)
   │
-  ├── AuthService / AuthServiceImpl  ← register, login, verifyOtp, resendOtp
+  ├── AuthService / AuthServiceImpl  ← register, login, verifyOtp, resendOtp,
+  │       │                            refresh, logout, changePassword,
+  │       │                            forgotPassword, resetPassword
   │       │
   │       ├── OtpService / OtpServiceImpl   ← OTP lifecycle: generate, verify, resend
   │       │       ├── OtpVerificationRepository  (JPA + pessimistic locks)
   │       │       ├── UserRepository
-  │       │       └── EmailService / EmailServiceImpl  (Spring Mail / JavaMailSender)
+  │       │       ├── OtpEmailPublisher / OtpEmailPublisherImpl  ← publishes to SQS
+  │       │       └── OtpRateLimitService / OtpRateLimitServiceImpl  ← Redis INCR+EXPIRE
   │       │
-  │       ├── JwtService / JwtServiceImpl   ← Token creation & validation + claims extraction
+  │       ├── JwtService / JwtServiceImpl   ← Token creation, validation, claims extraction
+  │       │                                   (extractJti, extractIssuedAt added for revocation)
+  │       ├── TokenBlacklistService / TokenBlacklistServiceImpl
+  │       │       ├── Per-token: blacklist(jti, ttl)  ← Redis key: blacklist:jti:<jti>
+  │       │       └── User-level: invalidateAllUserTokens(userId, ttl)
+  │       │                       ← Redis key: user:tokens:invalidated:<userId>
+  │       ├── PasswordPolicyService / PasswordPolicyServiceImpl
+  │       │       ├── enforceHistory(user, plainPassword)  ← checks last 12 BCrypt hashes
+  │       │       └── recordPasswordChange(user, encodedPassword)  ← prunes old entries
+  │       ├── EmailService / EmailServiceImpl  ← Spring Mail (SMTP) for password reset emails
   │       ├── UserGroupRepository            ← Auto-assign RETAIL_CUSTOMER on registration
-  │       └── UserRepository, UserLogRepository, PasswordEncoder
+  │       └── UserRepository, UserLogRepository, PasswordHistoryRepository, PasswordEncoder
+  │
+  ├── [OtpEmailConsumer]             ← Java 21 virtual thread; polls SQS (long-poll 20s);
+  │       └── SesClient              delivers via AWS SES; stale-message guard; auto-provisions queue
   │
   ├── PermissionService / PermissionServiceImpl   ← List all permissions
   ├── BankingRoleService / BankingRoleServiceImpl ← Role CRUD, assign/remove permissions
@@ -78,6 +95,9 @@ All business exceptions extend `BusinessException` which carries an `HttpStatus`
 | V10 | `V10__create_rbac_tables.sql` | RBAC schema: 7 new tables + 4 indexes |
 | V11 | `V11__seed_rbac_banking_data.sql` | 32 permissions, 12 roles, 13 groups + role→permission + group→role mappings |
 | V12 | `V12__backfill_user_groups.sql` | Assigns existing USER accounts → RETAIL_CUSTOMER; ADMIN accounts → SYSTEM_ADMIN |
+| V13 | `V13__create_password_history_table.sql` | Password history table (BCrypt hashes, last 12) |
+| V14 | `V14__add_password_changed_at_to_users.sql` | `password_changed_at` timestamp on users (PCI-DSS 8.3.9) |
+| V15 | `V15__add_audit_fields_to_user_log.sql` | `ip_address`, `user_agent` on user_log (PCI-DSS 10.2.4/10.2.7) |
 
 ### `users` Table
 
@@ -91,6 +111,7 @@ status                VARCHAR(50)   NOT NULL        -- NEW | ACTIVE | INACTIVE |
 role                  VARCHAR(50)                   -- USER | ADMIN  (DEPRECATED — superseded by RBAC groups)
 failed_login_attempts INT           NOT NULL DEFAULT 0
 locked_until          TIMESTAMP     NULL            -- NULL = not locked
+password_changed_at   TIMESTAMP     NOT NULL        -- V14: set on register + every password change
 -- Optional profile fields (V9) — all nullable
 date_of_birth         DATE          NULL
 gender                VARCHAR(50)   NULL            -- MALE | FEMALE | OTHER | PREFER_NOT_TO_SAY
@@ -98,6 +119,19 @@ profile_picture_url   VARCHAR(1024) NULL
 last_login_at         TIMESTAMP     NULL            -- updated on every successful login
 created_at            TIMESTAMP     NOT NULL
 updated_at            TIMESTAMP     NOT NULL
+```
+
+### `password_history` Table (V13)
+
+Stores BCrypt hashes of previous passwords per user. Never stores plaintext.
+
+```sql
+id             BIGSERIAL    PRIMARY KEY
+user_id        BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE
+password_hash  VARCHAR(60)  NOT NULL    -- BCrypt hash (always 60 chars)
+created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+
+INDEX idx_password_history_user_created ON (user_id, created_at DESC)
 ```
 
 ### RBAC Tables (V10)
@@ -154,9 +188,27 @@ idx_otp_user_unused  ON otp_verification(user_id, created_at DESC)
 
 Stores SHA-256 hashes of issued JWT tokens for audit purposes. Raw tokens are never persisted.
 
+```sql
+id          BIGSERIAL   PRIMARY KEY
+user_id     BIGINT      NOT NULL REFERENCES users(id)
+user_token  VARCHAR(512) NOT NULL   -- SHA-256 hex of raw token
+token_type  VARCHAR(20)  NOT NULL   -- ACCESS | REFRESH
+issued_at   TIMESTAMP    NOT NULL
+expires_at  TIMESTAMP    NOT NULL
+ip_address  VARCHAR(45)  NULL       -- V15: IPv4 or IPv6; honours X-Forwarded-For (PCI-DSS 10.2.4)
+user_agent  VARCHAR(512) NULL       -- V15: HTTP User-Agent string (PCI-DSS 10.2.7)
+created_at  TIMESTAMP    NOT NULL
+updated_at  TIMESTAMP    NOT NULL
 ```
-id, user_id, user_token (hash), token_type (ACCESS|REFRESH), issued_at, expires_at
-```
+
+### Redis Key Space
+
+| Key Pattern | Value | TTL | Purpose |
+|---|---|---|---|
+| `blacklist:jti:<jti>` | `"1"` | Token remaining lifetime | Per-token revocation (logout, rotation) |
+| `user:tokens:invalidated:<userId>` | epoch seconds | Refresh token lifetime (7 days) | User-level session invalidation (password change/reset) |
+| `otp:resend:<userId>` | counter string | 1 hour | OTP resend rate limiting |
+| `reset:token:<sha256(token)>` | userId string | 15 minutes | Password reset token (single-use) |
 
 ---
 
@@ -166,10 +218,20 @@ id, user_id, user_token (hash), token_type (ACCESS|REFRESH), issued_at, expires_
 
 | Method | Path | Status | Description |
 |--------|------|--------|-------------|
-| `POST` | `/auth/register` | 201 | Register user; OTP emailed |
+| `POST` | `/auth/register` | 201 | Register user; OTP emailed via SQS/SES |
 | `POST` | `/auth/verify-otp` | 200 | Verify OTP; account → ACTIVE |
-| `POST` | `/auth/resend-otp` | 200 | Resend OTP (max 3/hour) |
+| `POST` | `/auth/resend-otp` | 200 | Resend OTP (max 3/hour; Redis rate-limited) |
 | `POST` | `/auth/login` | 200 | Authenticate; return JWT pair + UserDto |
+| `POST` | `/auth/refresh` | 200 | Exchange refresh token for new token pair (rotation) |
+| `POST` | `/auth/forgot-password` | 200 | Send password reset email (always 200 — no enumeration) |
+| `POST` | `/auth/reset-password` | 200 | Reset password using single-use token from email |
+
+### Protected — `/auth/**` (valid ACCESS token required)
+
+| Method | Path | Status | Description |
+|--------|------|--------|-------------|
+| `POST` | `/auth/logout` | 200 | Revoke access + refresh token JTIs in Redis |
+| `POST` | `/auth/change-password` | 200 | Change password; invalidates all sessions on all devices |
 
 ### Admin — `/admin/**` (valid ACCESS token + `@PreAuthorize`)
 
@@ -198,7 +260,7 @@ All assign operations are **idempotent** — no error if already assigned. All r
   "name": "John Doe",
   "email": "john.doe@example.com",
   "phone": "+1234567890",
-  "password": "SecurePass1!",
+  "password": "Secure@Pass1!",
   "role": "USER",
   "addresses": [
     {
@@ -212,11 +274,9 @@ All assign operations are **idempotent** — no error if already assigned. All r
 }
 ```
 
-> **Note:** `status` field was removed (Step 4 security fix). Clients can no longer dictate their own account status. The service always sets `status = NEW`.
+> **Password rules (PCI-DSS 8.3.6 / NIST 800-63B):** 12–128 characters, at least one uppercase, one lowercase, one digit, one special character. Enforced by `@StrongPassword` custom annotation on the DTO.
 
 **Responses:** `201 Created` | `400 Bad Request` (validation) | `409 Conflict` (duplicate email)
-
-**Side effects:** User saved with `status=NEW`, auto-assigned to `RETAIL_CUSTOMER` group. OTP generated and emailed.
 
 ### `POST /auth/login` — Success Response
 
@@ -224,28 +284,11 @@ All assign operations are **idempotent** — no error if already assigned. All r
 {
   "accessToken":  "<JWT>",
   "refreshToken": "<JWT>",
-  "user": {
-    "id": 42,
-    "name": "John Doe",
-    "email": "john.doe@example.com",
-    "phone": "+94771234567",
-    "status": "ACTIVE",
-    "role": "USER",
-    "dateOfBirth": "1990-06-15",
-    "gender": "MALE",
-    "profilePictureUrl": null,
-    "lastLoginAt": "2026-05-03T11:00:00",
-    "createdAt": "2026-01-10T08:30:00",
-    "updatedAt": "2026-05-03T11:00:00",
-    "groups": ["RETAIL_CUSTOMER"],
-    "roles": ["ROLE_CUSTOMER_BASIC"],
-    "effectivePermissions": ["ACCOUNT_VIEW", "TRANSACTION_VIEW", "TRANSACTION_INITIATE", "LOAN_VIEW", "LOAN_APPLY"],
-    "addresses": [{ "addressLine1": "...", "country": "Sri Lanka" }]
-  }
+  "user": { ... }
 }
 ```
 
-**Responses:** `200 OK` | `400` (validation) | `401` (wrong credentials / locked) | `403` (account not ACTIVE)
+**Responses:** `200 OK` | `400` (validation) | `401` (wrong credentials / locked) | `403` (account not ACTIVE / password expired)
 
 ---
 
@@ -256,6 +299,7 @@ POST /auth/register
         │
         ▼
   [Validation] @Valid on RegisterRequestDto
+  [@StrongPassword] complexity: 12+ chars, upper, lower, digit, special
         │
         ▼
   [Duplicate check] userRepository.existsByEmail()
@@ -263,9 +307,14 @@ POST /auth/register
         │
         ▼
   [Build User] status=NEW, password=BCrypt(password), role=USER (default)
+               passwordChangedAt=now()
         │
         ▼
   [Persist] userRepository.save(user)
+        │
+        ▼
+  [Seed password history] passwordPolicyService.recordPasswordChange(user, encodedPassword)
+  (seeds first entry so future change-password can enforce no-reuse from day one)
         │
         ▼
   [Auto-assign default group]
@@ -280,9 +329,10 @@ POST /auth/register
         │       ├── invalidateAllUnusedForUser(user)
         │       ├── generateRawOtp()                   ← SecureRandom, 000000–999999
         │       ├── save(OtpVerification{hash, expiry}) ← SHA-256 hash stored, not raw OTP
-        │       └── emailService.sendOtp(...)
-        │
-        │  If emailService throws → REQUIRES_NEW rolls back OTP record only.
+        │       └── otpEmailPublisher.publish(OtpEmailMessage)  ── async via SQS ──►
+        │                                                         OtpEmailConsumer (virtual thread)
+        │                                                              └── SesClient.sendEmail()
+        │  If publisher throws → REQUIRES_NEW rolls back OTP record only.
         │  User and group membership already committed. Caller must use /resend-otp.
         │
         ▼
@@ -354,8 +404,9 @@ POST /auth/register
         └── != NEW  → OtpInvalidException
         │
         ▼
-  countByUserAndCreatedAtAfter(user, now - 1 hour)
-        │  ── count >= 3 ──► OtpResendLimitException
+  [Redis rate limit] otpRateLimitService.checkAndIncrementResend(userId, maxPerHour)
+  Key: otp:resend:<userId> — atomic INCR + EXPIRE 1h on first call
+        │  ── count > 3 ──► OtpResendLimitException
         │
         ▼
   generateAndSend(user)    [see Registration Flow — same internals]
@@ -395,16 +446,21 @@ POST /auth/login
         │  (checked AFTER password to avoid leaking account existence via status error)
         │
         ▼
-  Step 5: Set user.lastLoginAt = now()
+  Step 5: [Password age check — PCI-DSS Req 8.3.9]
+        │  passwordChangedAt < now - 90 days ──► 403 PasswordExpiredException
+        │  (user must use /auth/forgot-password or /auth/change-password)
+        │
+        ▼
+  Step 6: Set user.lastLoginAt = now()
           Reset failedLoginAttempts + lockedUntil if non-zero
           userRepository.save(user)
         │
         ▼
-  Step 6: generateAccessToken(user)   [15 min; embeds permissions + groups claims]
+  Step 7: generateAccessToken(user)   [15 min; embeds permissions + groups claims]
           generateRefreshToken(user)  [7 day]
         │
         ▼
-  Step 7: persistUserLog — store SHA-256 hash of each token in user_log
+  Step 8: persistUserLog — store SHA-256 hash + ip_address + user_agent in user_log
         │
         ▼
   buildUserDto(user)  ← maps entity to UserDto including groups, roles, effectivePermissions
@@ -412,29 +468,6 @@ POST /auth/login
         ▼
   200 OK  { accessToken, refreshToken, user: UserDto }
 ```
-
-### `UserDto` — Field Reference
-
-| Field | Type | Nullable | Notes |
-|---|---|---|---|
-| `id` | `Long` | no | DB primary key |
-| `name` | `String` | no | Full display name |
-| `email` | `String` | no | Unique identifier |
-| `phone` | `String` | yes | Optional contact number |
-| `status` | `UserStatus` | no | `NEW` \| `ACTIVE` \| `INACTIVE` \| `DELETED` |
-| `role` | `Role` | yes | `USER` \| `ADMIN` — **deprecated**; use `roles` list |
-| `dateOfBirth` | `LocalDate` | yes | Set via profile-edit API |
-| `gender` | `Gender` | yes | `MALE` \| `FEMALE` \| `OTHER` \| `PREFER_NOT_TO_SAY` |
-| `profilePictureUrl` | `String` | yes | CDN URL |
-| `lastLoginAt` | `LocalDateTime` | yes | Updated on every successful login |
-| `createdAt` | `LocalDateTime` | no | Account creation time |
-| `updatedAt` | `LocalDateTime` | no | Last entity modification time |
-| `groups` | `List<String>` | no | RBAC group names (e.g. `RETAIL_CUSTOMER`) |
-| `roles` | `List<String>` | no | Role names from group + direct assignments |
-| `effectivePermissions` | `List<String>` | no | Union of all permission codes |
-| `addresses` | `List<AddressDto>` | yes | All registered addresses |
-
-**Fields intentionally excluded:** `password`, `failedLoginAttempts`, `lockedUntil`.
 
 ### Brute-Force Lockout Rules
 
@@ -446,7 +479,139 @@ POST /auth/login
 
 ---
 
-## 7. JWT Design
+## 7. Token Flows
+
+### 7.1 Refresh (`POST /auth/refresh`) — Refresh Token Rotation
+
+```
+  [Validation] @NotBlank on refreshToken field
+        │
+        ▼
+  Step 1: jwtService.isTokenValid(token)
+        │  ── false ──► 401 InvalidTokenException
+        │
+        ▼
+  Step 2: extractTokenType(token) != "REFRESH"
+        │  ── wrong type ──► 401 InvalidTokenException
+        │
+        ▼
+  Step 3: tokenBlacklistService.isBlacklisted(jti)
+        │  ── blacklisted ──► 401 InvalidTokenException
+        │  (replay attack detection — token already consumed or revoked)
+        │
+        ▼
+  Step 4: userRepository.findByEmail(subject) + user.status != ACTIVE
+        │  ── not found / not active ──► 401 InvalidTokenException
+        │
+        ▼
+  Generate new accessToken + new refreshToken
+  persistUserLog for both new tokens
+        │
+        ▼
+  [Rotate] tokenBlacklistService.blacklist(oldRefreshJti, remainingTtl)
+  Old refresh token is now permanently revoked — single-use enforced
+        │
+        ▼
+  200 OK  { accessToken: "<new>", refreshToken: "<new>" }
+```
+
+### 7.2 Logout (`POST /auth/logout`)
+
+Requires valid `Authorization: Bearer <access_token>`. Refresh token optionally in body.
+
+```
+  revokeToken(accessToken)   ← extracts JTI, blacklists with remaining TTL
+  revokeToken(refreshToken)  ← same; warn if not provided
+        │
+        ▼
+  200 OK  { status: SUCCESS, message: "Logged out successfully" }
+```
+
+Each token is revoked independently. A missing refresh token logs a warning but does not fail the call.
+
+---
+
+## 8. Password Management Flows
+
+### 8.1 Change Password (`POST /auth/change-password`) — Protected
+
+```
+  [Validation] @StrongPassword on newPassword field
+        │
+        ▼
+  Load user from access token userId claim
+        │
+        ▼
+  Step 1: passwordEncoder.matches(currentPassword, user.password)
+        │  ── mismatch ──► 401 InvalidCredentialsException
+        │
+        ▼
+  Step 2: passwordPolicyService.enforceHistory(user, newPassword)
+        │  ── matches last 12 hashes ──► 400 PasswordHistoryViolationException
+        │
+        ▼
+  Encode newPassword → save user (password + passwordChangedAt = now())
+        │
+        ▼
+  passwordPolicyService.recordPasswordChange(user, encodedPassword)
+  (saves hash to password_history; prunes entries beyond history window of 12)
+        │
+        ▼
+  tokenBlacklistService.invalidateAllUserTokens(userId, refreshTokenTtlSeconds)
+  Sets Redis key user:tokens:invalidated:<userId> = now() epoch
+  Filter rejects all tokens issued before this timestamp on next request
+        │
+        ▼
+  200 OK  { status: SUCCESS, message: "Password changed successfully. Please log in again on all devices." }
+```
+
+### 8.2 Forgot Password (`POST /auth/forgot-password`) — Public
+
+```
+  userRepository.findByEmail(email).ifPresent(user -> {
+      rawToken  = UUID.randomUUID()
+      tokenHash = sha256Hex(rawToken)
+      Redis SET reset:token:<tokenHash> → userId  TTL=15min
+      emailService.sendPasswordResetEmail(email, name, resetLink, 15)
+      ← resetLink = app.password-reset.base-url + "?token=" + rawToken
+  })
+        │
+        ▼
+  200 OK  { message: "If that email is registered, a password reset link has been sent." }
+  [Always 200 — prevents account enumeration]
+```
+
+### 8.3 Reset Password (`POST /auth/reset-password`) — Public
+
+```
+  tokenHash = sha256Hex(request.token)
+  userId    = Redis GET reset:token:<tokenHash>
+        │  ── null (expired or not found) ──► 400 PasswordResetTokenException
+        │
+        ▼
+  Load user by userId
+        │
+        ▼
+  passwordPolicyService.enforceHistory(user, newPassword)
+        │  ── reuse ──► 400 PasswordHistoryViolationException
+        │
+        ▼
+  [Consume token] Redis DEL reset:token:<tokenHash>  ← single-use enforced
+        │
+        ▼
+  Encode newPassword → save user (password + passwordChangedAt = now())
+  passwordPolicyService.recordPasswordChange(user, encodedPassword)
+        │
+        ▼
+  tokenBlacklistService.invalidateAllUserTokens(userId, refreshTokenTtlSeconds)
+        │
+        ▼
+  200 OK  { message: "Password reset successfully. Please log in with your new password." }
+```
+
+---
+
+## 9. JWT Design
 
 Tokens are signed with HMAC-SHA-256 using a key derived from `app.jwt.secret` (must be ≥ 256 bits).
 
@@ -468,10 +633,12 @@ Tokens are signed with HMAC-SHA-256 using a key derived from `app.jwt.secret` (m
 }
 ```
 
-- **`permissions`** — flat list of permission codes computed at login time from group roles + direct roles. Used directly by `@PreAuthorize("hasAuthority('ACCOUNT_VIEW')")` on downstream services without a DB call.
+- **`jti`** — UUID per token. Used for per-token revocation (logout, refresh rotation) via Redis.
+- **`iat`** — issued-at epoch. Used for user-level session invalidation after password change.
+- **`permissions`** — flat list of permission codes computed at login time. Used by `@PreAuthorize` without a DB call.
 - **`groups`** — group names at time of login; informational.
 - **`role`** — kept for backward compatibility; deprecated. Use `permissions` for authorization decisions.
-- **`tokenType`** — `ACCESS` or `REFRESH`. The `JwtAuthenticationFilter` rejects REFRESH tokens for API calls (NIST 800-63B §7.1).
+- **`tokenType`** — `ACCESS` or `REFRESH`. The filter rejects `REFRESH` tokens for API calls (NIST 800-63B §7.1).
 
 ### Token Lifetimes (configurable)
 
@@ -480,27 +647,33 @@ Tokens are signed with HMAC-SHA-256 using a key derived from `app.jwt.secret` (m
 | Access | 15 min | `app.jwt.access-token-expiry-ms=900000` |
 | Refresh | 7 days | `app.jwt.refresh-token-expiry-ms=604800000` |
 
-### Token Validation (`JwtAuthenticationFilter`)
+### Token Validation (`JwtAuthenticationFilter`) — 6-Step Flow
 
 ```
 Request arrives
         │
         ▼
-  [No Authorization header / not Bearer] → pass through (public endpoints)
+  Step 1: No Authorization: Bearer header → pass through (public endpoints)
         │
         ▼
-  [jwtService.isTokenValid(token)] → false → 401 JSON
+  Step 2: jwtService.isTokenValid(token) → false → 401 JSON "Invalid or expired token"
         │
         ▼
-  [extractTokenType(token) != "ACCESS"] → 401 JSON (REFRESH token rejected)
+  Step 3: extractTokenType(token) != "ACCESS" → 401 JSON (REFRESH token rejected, NIST 800-63B §7.1)
         │
         ▼
-  [Already authenticated in SecurityContext] → pass through (no double-processing)
+  Step 4: tokenBlacklistService.isBlacklisted(jti) → true → 401 JSON "Token has been revoked"
+        │  (per-token revocation — logout, refresh rotation)
         │
         ▼
-  Extract email, userId, permissions, groups from claims
-  Build UserPrincipal (implements UserDetails — no DB call)
-  Set UsernamePasswordAuthenticationToken in SecurityContextHolder
+  Step 5: tokenBlacklistService.isUserTokensInvalidated(userId, token.iat) → true
+        │  → 401 JSON "Session has been invalidated. Please log in again."
+        │  (user-level revocation — password change/reset, suspension)
+        │
+        ▼
+  Step 6: Extract email, userId, permissions, groups from claims
+          Build UserPrincipal (no DB call)
+          Set UsernamePasswordAuthenticationToken in SecurityContextHolder
         │
         ▼
   Continue filter chain
@@ -508,11 +681,11 @@ Request arrives
 
 ### Token Audit Log
 
-Every issued token has its SHA-256 hash stored in `user_log` alongside `token_type`, `issued_at`, `expires_at`. Raw tokens are never persisted (PCI-DSS v4 Req 10.2).
+Every issued token has its SHA-256 hash stored in `user_log` alongside `token_type`, `issued_at`, `expires_at`, `ip_address`, `user_agent`. Raw tokens are never persisted (PCI-DSS v4 Req 10.2).
 
 ---
 
-## 8. RBAC Model
+## 10. RBAC Model
 
 ### Authorization Hierarchy
 
@@ -547,10 +720,6 @@ User
 | `SYSTEM_ADMIN` | ADMIN | `ROLE_SYSTEM_ADMIN` |
 | `SUPER_ADMIN` | ADMIN | `ROLE_SUPER_ADMIN` |
 
-### Default Group on Registration
-
-New users are automatically assigned to the `RETAIL_CUSTOMER` group in `AuthServiceImpl.register()`. If the seed group is not found (e.g., migration not run), a warning is logged and registration succeeds without group assignment — no exception is thrown.
-
 ### Permission Categories (32 total)
 
 | Category | Examples |
@@ -563,37 +732,25 @@ New users are automatically assigned to the `RETAIL_CUSTOMER` group in `AuthServ
 | REPORT | `REPORT_VIEW`, `REPORT_EXPORT`, `REPORT_AUDIT_VIEW` |
 | ADMIN | `ROLE_MANAGE`, `GROUP_MANAGE`, `PERMISSION_MANAGE`, `SYSTEM_CONFIG_VIEW`, `SYSTEM_CONFIG_UPDATE`, `AUDIT_LOG_VIEW` |
 
-### Spring Security Wiring
-
-- `@EnableMethodSecurity(prePostEnabled = true)` on `SecurityConfig`
-- `@PreAuthorize("hasAuthority('PERMISSION_CODE')")` on each `AdminController` method
-- `UserPrincipal` (implements `UserDetails`) is built from JWT claims — **no DB call during request processing**
-- `SecurityConfig` sets `SessionCreationPolicy.STATELESS` and wires custom 401/403 JSON handlers
-- `ObjectMapper` in `SecurityConfig` is a `private static final` field — Spring Boot 4's auto-configuration ordering made constructor injection unreliable at context startup
-
 ---
 
-## 9. Security Controls — Banking Standards Audit
+## 11. Security Controls — Banking Standards Audit
 
-### 9.1 OTP Generation
+### 11.1 OTP Generation & Verification
 
 | Control | Implementation | Standard |
 |---------|---------------|----------|
 | Cryptographically secure randomness | `java.security.SecureRandom` | NIST 800-63B §5.1.4 |
 | Full 10⁶ entropy (000000–999999) | `String.format("%06d", secureRandom.nextInt(1_000_000))` | NIST 800-63B §5.1.4 |
-| OTP stored as hash only | SHA-256 hex stored; raw value sent over SMTP and never persisted | PCI-DSS v4 Req 8.3 |
+| OTP stored as hash only | SHA-256 hex stored; raw value sent over SES and never persisted | PCI-DSS v4 Req 8.3 |
 | Short expiry | 10 minutes (configurable via `app.otp.expiry-minutes`) | NIST 800-63B §5.1.4.2 |
-
-### 9.2 OTP Verification
-
-| Control | Implementation | Standard |
-|---------|---------------|----------|
 | Constant-time comparison | `MessageDigest.isEqual(hash1.getBytes(), hash2.getBytes())` | OWASP ASVS 2.7.6 |
-| Attempt limiting (3 per OTP) | Counter incremented *before* hash comparison; `noRollbackFor` ensures commit on exception | NIST 800-63B §5.1.4.2 |
-| Pessimistic DB lock on OTP record | `@Lock(PESSIMISTIC_WRITE)` on repository query | OWASP ASVS 11.1.6 |
-| Previous OTPs invalidated on resend | `invalidateAllUnusedForUser()` called at start of `generateAndSend()` | NIST 800-63B §5.1.4.2 |
+| Attempt limiting | Counter incremented before hash comparison; `noRollbackFor` ensures commit on exception | NIST 800-63B §5.1.4.2 |
+| Pessimistic DB lock | `@Lock(PESSIMISTIC_WRITE)` on OTP repository query | OWASP ASVS 11.1.6 |
+| OTP resend rate limit | Redis INCR+EXPIRE (atomic, sub-millisecond, multi-pod safe) | NIST 800-63B §5.1.4.2 |
+| Stale-message guard (SQS) | Consumer discards messages where age ≥ OTP expiry — prevents delivering expired OTPs | NIST 800-63B §5.1.4.2 |
 
-### 9.3 Login Security
+### 11.2 Login Security
 
 | Control | Implementation | Standard |
 |---------|---------------|----------|
@@ -604,19 +761,66 @@ New users are automatically assigned to the `RETAIL_CUSTOMER` group in `AuthServ
 | Failed attempt tracking | `noRollbackFor=BusinessException` ensures counter commits on exception | PCI-DSS v4 Req 8.3 |
 | `status` removed from `RegisterRequestDto` | Client cannot set own account status | OWASP ASVS 4.1.2 |
 
-### 9.4 JWT & Token Security
+### 11.3 Password Policy
+
+| Control | Implementation | Standard |
+|---------|---------------|----------|
+| Complexity enforcement | `@StrongPassword` custom annotation + `StrongPasswordValidator`: 12–128 chars, upper, lower, digit, special | PCI-DSS 8.3.6 / NIST 800-63B |
+| Password history (no-reuse) | Last 12 BCrypt hashes stored in `password_history`; `PasswordPolicyService.enforceHistory()` checks all | PCI-DSS 8.3.6 / NIST 800-63B §5.1.1 |
+| Maximum password age | `password_changed_at` tracked; login blocked after 90 days with `PasswordExpiredException` | PCI-DSS 8.3.9 |
+| History seeded on registration | First password hash stored on registration — no-reuse enforced from day one | PCI-DSS 8.3.6 |
+| History table pruned automatically | `PasswordPolicyServiceImpl.pruneOldEntries()` keeps only last 12 entries per user | — |
+
+### 11.4 JWT & Token Security
 
 | Control | Implementation | Standard |
 |---------|---------------|----------|
 | Signed with HMAC-SHA-256 | `Keys.hmacShaKeyFor(secret.getBytes(UTF-8))` | RFC 7518 |
 | Unique token ID (jti) | `UUID.randomUUID()` per token — enables per-token revocation | OWASP ASVS 3.5.1 |
 | Audience claim | `aud: ["shop-platform"]` — prevents cross-service replay | RFC 7519 §4.1.3 |
-| Token audit log | SHA-256 hash stored in `user_log` | PCI-DSS v4 Req 10.2 |
+| Token audit log | SHA-256 hash + IP + User-Agent stored in `user_log` | PCI-DSS v4 Req 10.2 |
 | Short access token lifetime | 15 minutes | OWASP ASVS 3.3.1 |
-| REFRESH tokens rejected for API calls | `JwtAuthenticationFilter` checks `tokenType == ACCESS` | NIST 800-63B §7.1 |
+| REFRESH tokens rejected for API calls | Filter Step 3 checks `tokenType == ACCESS` | NIST 800-63B §7.1 |
+| Per-token revocation | JTI blacklisted in Redis on logout; checked in filter Step 4 | OWASP ASVS 3.3.3 |
+| Refresh token rotation | Old refresh token blacklisted immediately after new pair issued; single-use enforced | OWASP ASVS 3.3.3 |
+| User-level session invalidation | Redis key `user:tokens:invalidated:<userId>` set on password change/reset; filter Step 5 rejects all older tokens | OWASP ASVS 3.3.3 |
 | Permission snapshot in token | Computed at login; re-login required on permission change | PCI-DSS v4 Req 8.3.9 |
 
-### 9.5 RBAC Access Control
+### 11.5 Password Reset Security
+
+| Control | Implementation | Standard |
+|---------|---------------|----------|
+| Cryptographically random reset token | `UUID.randomUUID()` (128-bit entropy) | NIST 800-63B §5.1.2 |
+| Token stored as SHA-256 hash | `HashUtil.sha256Hex(rawToken)` stored in Redis; raw token sent only in email | OWASP ASVS 2.5.3 |
+| Short TTL | 15 minutes (configurable via `app.password-reset.token-ttl-minutes`) | NIST 800-63B §5.1.2 |
+| Single-use | Token deleted from Redis immediately on first successful use | NIST 800-63B §5.1.2 |
+| No email enumeration | `forgotPassword()` always returns 200 regardless of whether email exists | OWASP ASVS 2.5.6 |
+| Sessions invalidated after reset | `invalidateAllUserTokens()` called after successful reset | OWASP ASVS 3.3.3 |
+
+### 11.6 HTTP Security Headers
+
+Applied to every response via Spring Security `headers()` DSL (PCI-DSS 6.4.2 / OWASP ASVS 14.4):
+
+| Header | Value | Protects against |
+|---|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` | HTTP downgrade / MITM (PCI-DSS 4.2.1) |
+| `X-Frame-Options` | `DENY` | Clickjacking (OWASP A05) |
+| `X-Content-Type-Options` | `nosniff` | MIME-type confusion attacks |
+| `Cache-Control` | `no-cache, no-store, max-age=0` | Browser caching of auth tokens |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` | XSS / data injection |
+| `Referrer-Policy` | `no-referrer` | URL leakage in cross-origin requests |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` | Browser feature abuse |
+
+### 11.7 CORS Policy
+
+Configured via Spring Security `.cors()`. Origins read from `app.cors.allowed-origins` — never wildcard. Override per environment via `CORS_ALLOWED_ORIGINS` env var.
+
+- **Methods:** GET, POST, PUT, PATCH, DELETE, OPTIONS
+- **Headers:** `Authorization`, `Content-Type`
+- **Credentials:** `true` (required to send `Authorization` header from browser)
+- **Preflight cache:** 30 minutes
+
+### 11.8 RBAC Access Control
 
 | Control | Implementation | Standard |
 |---------|---------------|----------|
@@ -627,28 +831,44 @@ New users are automatically assigned to the `RETAIL_CUSTOMER` group in `AuthServ
 | All admin actions auditable | All `/admin/**` calls logged via `RequestLoggingFilter` + MDC correlation ID | PCI-DSS v4 Req 10.2 |
 | No sensitive data in JWT | JWT contains only permission codes, not account balances or PII | OWASP ASVS 3.5.2 |
 
-### 9.6 Logging & Non-Disclosure
+### 11.9 Audit Logging
 
-All log statements mask email addresses via `MaskingUtil.maskEmail()` (e.g., `jo**@example.com`).
-OTP values and raw tokens are **never** logged at any level.
-Error responses never expose internal stack traces.
+| Field | Source | Standard |
+|---|---|---|
+| `ip_address` | `X-Forwarded-For` header (first entry) or `RemoteAddr` | PCI-DSS 10.2.4 |
+| `user_agent` | HTTP `User-Agent` header (truncated to 512 chars) | PCI-DSS 10.2.7 |
+| Token hash | `SHA-256(rawToken)` — never raw token | PCI-DSS v4 Req 10.2 |
+| Email masking | `MaskingUtil.maskEmail()` in all log statements | GDPR / PII protection |
+
+### 11.10 Async Email Delivery (OTP)
+
+OTP emails are decoupled from the HTTP request path via SQS + SES:
+- `OtpEmailPublisher` serializes `OtpEmailMessage` (with `Instant createdAt`) to JSON and sends to SQS
+- `OtpEmailConsumer` runs on a Java 21 virtual thread polling SQS with 20-second long-polling
+- The consumer applies a stale-message guard: messages older than `expiryMinutes` are discarded without delivery
+- The queue is auto-provisioned on application startup (idempotent `CreateQueue`)
+- SQS message is deleted only after successful SES delivery (at-least-once; retry via visibility timeout)
 
 ---
 
-## 10. Exception Model
+## 12. Exception Model
 
 ```
 BusinessException  (abstract — carries HttpStatus)
-  ├── EmailAlreadyExistsException     409 CONFLICT
-  ├── InvalidCredentialsException     401 UNAUTHORIZED
-  ├── AccountLockedException          401 UNAUTHORIZED   (message includes lock expiry)
-  ├── UserNotActiveException          403 FORBIDDEN
-  ├── OtpInvalidException             400 BAD_REQUEST    (also used for unknown email)
-  ├── OtpExpiredException             400 BAD_REQUEST
-  ├── OtpMaxAttemptsException         429 TOO_MANY_REQUESTS
-  ├── OtpResendLimitException         429 TOO_MANY_REQUESTS
-  ├── ResourceNotFoundException       404 NOT_FOUND      (RBAC: role/group/user not found)
-  └── AccessDeniedException           403 FORBIDDEN      (explicit service-layer 403)
+  ├── EmailAlreadyExistsException          409 CONFLICT
+  ├── InvalidCredentialsException          401 UNAUTHORIZED
+  ├── InvalidTokenException                401 UNAUTHORIZED   (refresh/reset token invalid/expired/revoked)
+  ├── AccountLockedException               401 UNAUTHORIZED   (message includes lock expiry)
+  ├── UserNotActiveException               403 FORBIDDEN
+  ├── PasswordExpiredException             403 FORBIDDEN      (password > 90 days old)
+  ├── PasswordHistoryViolationException    400 BAD_REQUEST    (new password matches recent history)
+  ├── PasswordResetTokenException          400 BAD_REQUEST    (reset token invalid/expired/already used)
+  ├── OtpInvalidException                  400 BAD_REQUEST    (also used for unknown email)
+  ├── OtpExpiredException                  400 BAD_REQUEST
+  ├── OtpMaxAttemptsException              429 TOO_MANY_REQUESTS
+  ├── OtpResendLimitException              429 TOO_MANY_REQUESTS
+  ├── ResourceNotFoundException            404 NOT_FOUND      (RBAC: role/group/user not found)
+  └── AccessDeniedException                403 FORBIDDEN      (explicit service-layer 403)
 
 JwtAuthenticationException  (extends RuntimeException — handled by filter, not GlobalExceptionHandler)
   └── Written directly as 401 JSON by JwtAuthenticationFilter
@@ -667,129 +887,189 @@ JwtAuthenticationException  (extends RuntimeException — handled by filter, not
 
 ---
 
-## 11. Configuration Reference
+## 13. Configuration Reference
 
 ```properties
-# ── Database ──────────────────────────────────────────────────────────────────
+# ── Database ────────────────────────────────────────────────────────���─────────
 spring.datasource.url=jdbc:postgresql://localhost:5433/auth_db
 spring.datasource.username=admin
 spring.datasource.password=admin
 
-# ── Mail (override via env vars in production) ────────────────────────────────
+# ── Redis ─────────────────────────────────────────────────────────────────────
+spring.data.redis.host=${REDIS_HOST:localhost}
+spring.data.redis.port=${REDIS_PORT:6379}
+
+# ── AWS / LocalStack ──────────────────────────────────────────────────────────
+cloud.aws.region.static=${AWS_REGION:us-east-1}
+cloud.aws.credentials.access-key=${AWS_ACCESS_KEY_ID:test}
+cloud.aws.credentials.secret-key=${AWS_SECRET_ACCESS_KEY:test}
+cloud.aws.endpoint=${AWS_ENDPOINT:http://localhost:4566}   # blank = real AWS
+
+# ── SQS / SES — OTP email async delivery ─────────────────────────────────────
+app.messaging.otp-email-queue-url=${OTP_EMAIL_QUEUE_URL:http://localhost:4566/000000000000/otp-email-queue}
+app.messaging.ses-sender-email=${SES_SENDER_EMAIL:noreply@shop.com}
+app.messaging.consumer.enabled=${MESSAGING_CONSUMER_ENABLED:true}   # set false in tests
+
+# ── Mail (SMTP — password reset emails) ───────────────────────────────────────
 spring.mail.host=${MAIL_HOST:smtp.gmail.com}
 spring.mail.port=${MAIL_PORT:587}
 spring.mail.username=${MAIL_USERNAME:noreply@shop.com}
 spring.mail.password=${MAIL_PASSWORD:}
-spring.mail.properties.mail.smtp.auth=true
-spring.mail.properties.mail.smtp.starttls.enable=true
-
-# ── OTP ───────────────────────────────────────────────────────────────────────
-app.otp.expiry-minutes=10          # OTP valid for N minutes after generation
-app.otp.max-attempts=3             # Failed attempts before OTP is locked
-app.otp.max-resends-per-hour=3     # Max resend requests per user per hour
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
-# IMPORTANT: Replace JWT_SECRET with a 256+ bit random value in production
 app.jwt.secret=${JWT_SECRET:MyVeryLongAndSecureJwtSecretKeyThatIsAtLeast256BitsLongForDevOnly}
 app.jwt.access-token-expiry-ms=900000      # 15 minutes
 app.jwt.refresh-token-expiry-ms=604800000  # 7 days
+
+# ── OTP ───────────────────────────────────────────────────────────────────────
+app.otp.expiry-minutes=10
+app.otp.max-attempts=3
+app.otp.max-resends-per-hour=3
+
+# ── Password policy (PCI-DSS 8.3.6 / NIST 800-63B) ───────────────────────────
+app.security.password.history-count=12    # no-reuse window
+app.security.password.max-age-days=90     # PCI-DSS 8.3.9 rotation
+
+# ── Password reset ────────────────────────────────────────────────────────────
+app.password-reset.base-url=${PASSWORD_RESET_BASE_URL:http://localhost:3000/reset-password}
+app.password-reset.token-ttl-minutes=15
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:4200}
 ```
 
 ### Production Checklist
 
-- [ ] Set `JWT_SECRET` to a cryptographically random ≥ 32-byte value (env var or vault secret)
-- [ ] Set `MAIL_USERNAME` / `MAIL_PASSWORD` (or use AWS SES / SendGrid)
-- [ ] Set `MAIL_HOST` / `MAIL_PORT` to match your SMTP provider
+- [ ] Set `JWT_SECRET` to a cryptographically random ≥ 32-byte value (env var or Vault secret)
+- [ ] Set `MAIL_USERNAME` / `MAIL_PASSWORD` (or switch to SES for all email)
+- [ ] Set `SES_SENDER_EMAIL` and verify the sender address in SES production
+- [ ] Set `CORS_ALLOWED_ORIGINS` to exact production frontend origins (no wildcards)
+- [ ] Set `PASSWORD_RESET_BASE_URL` to exact production frontend URL
+- [ ] Set `AWS_ENDPOINT` to blank (or omit) to use real AWS instead of LocalStack
+- [ ] Set `REDIS_HOST` / `REDIS_PORT` to point to production Redis
 - [ ] Disable `spring.jpa.show-sql` and `logging.level.org.hibernate.SQL=DEBUG`
-- [ ] Enable HTTPS / TLS at the load balancer or ingress
-- [ ] Verify V11 seed data present: `SELECT count(*) FROM permissions` → 32; `SELECT count(*) FROM user_groups` → 13
-- [ ] Run V12 migration and verify: `SELECT count(*) FROM user_group_memberships` > 0
+- [ ] Enable HTTPS / TLS at the load balancer or ingress (HSTS header is already set)
+- [ ] Verify V11 seed data: `SELECT count(*) FROM permissions` → 32; `SELECT count(*) FROM user_groups` → 13
+- [ ] Verify V12 migration: `SELECT count(*) FROM user_group_memberships` > 0
 
 ---
 
-## 12. File Map
+## 14. File Map
 
 ```
 auth/
 ├── src/main/java/com/shop/auth/
 │   ├── controller/
-│   │   ├── AuthController.java              # POST /auth/register, /login, /verify-otp, /resend-otp
-│   │   └── AdminController.java             # 13 admin endpoints under /admin/**
+│   │   ├── AuthController.java              # register, login, verify-otp, resend-otp,
+│   │   │                                   #   refresh, logout, change-password,
+│   │   │                                   #   forgot-password, reset-password
+│   │   └── AdminController.java            # 13 admin endpoints under /admin/**
 │   ├── filter/
-│   │   └── JwtAuthenticationFilter.java     # OncePerRequestFilter: validates JWT, sets UserPrincipal
+│   │   └── JwtAuthenticationFilter.java    # 6-step validation: sig, type, JTI blacklist,
+│   │                                       #   user-level invalidation, UserPrincipal
 │   ├── security/
-│   │   └── UserPrincipal.java               # Implements UserDetails; built from JWT claims (no DB)
+│   │   └── UserPrincipal.java              # Implements UserDetails; built from JWT claims (no DB)
 │   ├── service/
 │   │   ├── AuthService.java
 │   │   ├── OtpService.java
-│   │   ├── EmailService.java
-│   │   ├── JwtService.java                  # + extractPermissions, extractGroups, extractTokenType, isTokenValid(String)
-│   │   ├── PermissionService.java           # listAll()
-│   │   ├── BankingRoleService.java          # listAll, getById, assignPermission, removePermission
-│   │   ├── UserGroupService.java            # listAll, getById, assignRoleToGroup, removeRoleFromGroup,
-│   │   │                                    #   getUserGroups, addUserToGroup, removeUserFromGroup,
-│   │   │                                    #   getEffectivePermissions
+│   │   ├── EmailService.java               # sendOtp() + sendPasswordResetEmail()
+│   │   ├── JwtService.java                 # + extractJti(), extractIssuedAt()
+│   │   ├── TokenBlacklistService.java      # blacklist(jti), isBlacklisted,
+│   │   │                                   #   invalidateAllUserTokens, isUserTokensInvalidated
+│   │   ├── OtpRateLimitService.java        # checkAndIncrementResend(userId, maxPerHour)
+│   │   ├── PasswordPolicyService.java      # enforceHistory(), recordPasswordChange()
+│   │   ├── PermissionService.java
+│   │   ├── BankingRoleService.java
+│   │   ├── UserGroupService.java
 │   │   └── impl/
-│   │       ├── AuthServiceImpl.java         # register() auto-assigns RETAIL_CUSTOMER; buildUserDto() includes RBAC fields
+│   │       ├── AuthServiceImpl.java        # All auth flows; persistUserLog pulls IP/UA
+│   │       │                               #   via RequestContextHolder
 │   │       ├── OtpServiceImpl.java
 │   │       ├── EmailServiceImpl.java
-│   │       ├── JwtServiceImpl.java          # buildToken() embeds permissions + groups claims
+│   │       ├── JwtServiceImpl.java
+│   │       ├── TokenBlacklistServiceImpl.java  # Two Redis key spaces: JTI + user-level
+│   │       ├── OtpRateLimitServiceImpl.java    # Redis INCR+EXPIRE
+│   │       ├── PasswordPolicyServiceImpl.java  # History check + prune (keeps last 12)
 │   │       ├── PermissionServiceImpl.java
-│   │       ├── BankingRoleServiceImpl.java  # @Transactional(readOnly=true) + idempotent mutations
-│   │       └── UserGroupServiceImpl.java    # getEffectivePermissions traverses lazy collections
+│   │       ├── BankingRoleServiceImpl.java
+│   │       └── UserGroupServiceImpl.java
+│   ├── messaging/
+│   │   ├── OtpEmailMessage.java            # record: messageId, email, name, otp, expiryMinutes, createdAt
+│   │   ├── OtpEmailPublisher.java          # interface: publish(OtpEmailMessage)
+│   │   ├── OtpEmailConsumer.java           # Virtual thread SQS poller; SES delivery; queue auto-provision
+│   │   └── impl/
+│   │       └── OtpEmailPublisherImpl.java  # SqsClient + ObjectMapper
 │   ├── entity/
-│   │   ├── User.java                        # + groups (M:M UserGroup), directRoles (M:M BankingRole)
+│   │   ├── User.java                       # + passwordChangedAt (V14)
 │   │   ├── Address.java
-│   │   ├── UserLog.java
+│   │   ├── UserLog.java                    # + ipAddress, userAgent (V15)
 │   │   ├── OtpVerification.java
-│   │   ├── Permission.java                  # @EqualsAndHashCode(onlyExplicitlyIncluded=true) on id
-│   │   ├── BankingRole.java                 # + Set<Permission> via role_permissions
-│   │   └── UserGroup.java                   # + Set<BankingRole> via group_roles
+│   │   ├── PasswordHistory.java            # BCrypt hash + user + createdAt (V13)
+│   │   ├── Permission.java
+│   │   ├── BankingRole.java
+│   │   └── UserGroup.java
 │   ├── repository/
 │   │   ├── UserRepository.java
 │   │   ├── UserLogRepository.java
 │   │   ├── OtpVerificationRepository.java
-│   │   ├── PermissionRepository.java        # findByCode(String)
-│   │   ├── BankingRoleRepository.java       # findByName(String)
-│   │   └── UserGroupRepository.java         # findByName(String)
+│   │   ├── PasswordHistoryRepository.java  # findRecentByUser, findAllIdsByUser, deleteByIdIn
+│   │   ├── PermissionRepository.java
+│   │   ├── BankingRoleRepository.java
+│   │   └── UserGroupRepository.java
 │   ├── dto/
-│   │   ├── RegisterRequestDto.java          # status field removed (security fix)
+│   │   ├── RegisterRequestDto.java         # @StrongPassword replaces @Size(min=8)
 │   │   ├── LoginRequestDto.java
 │   │   ├── LoginResponseDto.java
-│   │   ├── UserDto.java                     # + groups, roles, effectivePermissions
+│   │   ├── RefreshTokenRequestDto.java     # refreshToken @NotBlank
+│   │   ├── RefreshTokenResponseDto.java    # accessToken + refreshToken
+│   │   ├── LogoutRequestDto.java           # refreshToken (optional but recommended)
+│   │   ├── ChangePasswordRequestDto.java   # currentPassword + newPassword (@StrongPassword)
+│   │   ├── ForgotPasswordRequestDto.java   # email @Email
+│   │   ├── ResetPasswordRequestDto.java    # token + newPassword (@StrongPassword)
+│   │   ├── UserDto.java
 │   │   ├── AddressDto.java
 │   │   ├── VerifyOtpRequestDto.java
 │   │   ├── ResendOtpRequestDto.java
 │   │   ├── ResponseDto.java
-│   │   ├── PermissionDto.java               # id, code, description, category
-│   │   ├── BankingRoleDto.java              # id, name, description, List<PermissionDto>
-│   │   ├── UserGroupDto.java                # id, name, description, type, List<BankingRoleDto>
-│   │   ├── AssignPermissionToRoleRequestDto.java  # @NotNull Long permissionId
-│   │   ├── AssignRoleToGroupRequestDto.java       # @NotNull Long roleId
-│   │   └── AssignGroupRequestDto.java             # @NotNull Long groupId
+│   │   ├── PermissionDto.java
+│   │   ├── BankingRoleDto.java
+│   │   ├── UserGroupDto.java
+│   │   ├── AssignPermissionToRoleRequestDto.java
+│   │   ├── AssignRoleToGroupRequestDto.java
+│   │   └── AssignGroupRequestDto.java
 │   ├── exception/
 │   │   ├── BusinessException.java
-│   │   ├── EmailAlreadyExistsException.java  # 409
-│   │   ├── InvalidCredentialsException.java  # 401
-│   │   ├── AccountLockedException.java       # 401
-│   │   ├── UserNotActiveException.java       # 403
-│   │   ├── OtpInvalidException.java          # 400
-│   │   ├── OtpExpiredException.java          # 400
-│   │   ├── OtpMaxAttemptsException.java      # 429
-│   │   ├── OtpResendLimitException.java      # 429
-│   │   ├── ResourceNotFoundException.java    # 404
-│   │   ├── AccessDeniedException.java        # 403 (explicit service-layer)
-│   │   ├── JwtAuthenticationException.java   # RuntimeException — handled by filter
+│   │   ├── EmailAlreadyExistsException.java      # 409
+│   │   ├── InvalidCredentialsException.java      # 401
+│   │   ├── InvalidTokenException.java            # 401 (refresh/reset token errors)
+│   │   ├── AccountLockedException.java           # 401
+│   │   ├── UserNotActiveException.java           # 403
+│   │   ├── PasswordExpiredException.java         # 403
+│   │   ├── PasswordHistoryViolationException.java # 400
+│   │   ├── PasswordResetTokenException.java      # 400
+│   │   ├── OtpInvalidException.java              # 400
+│   │   ├── OtpExpiredException.java              # 400
+│   │   ├── OtpMaxAttemptsException.java          # 429
+│   │   ├── OtpResendLimitException.java          # 429
+│   │   ├── ResourceNotFoundException.java        # 404
+│   │   ├── AccessDeniedException.java            # 403
+│   │   ├── JwtAuthenticationException.java       # RuntimeException — filter-handled
 │   │   └── handler/
 │   │       └── GlobalExceptionHandler.java
+│   ├── validation/
+│   │   ├── StrongPassword.java             # Custom @Constraint annotation
+│   │   └── StrongPasswordValidator.java    # Enforces all complexity rules; collects all violations
 │   ├── config/
-│   │   └── SecurityConfig.java              # @EnableMethodSecurity; JWT filter; stateless; 401/403 JSON handlers
-│   │                                        # ObjectMapper is a private static final field (not injected) —
-│   │                                        # avoids Spring Boot 4 auto-config ordering issue at startup
+│   │   ├── SecurityConfig.java             # @EnableMethodSecurity; 6-step filter; security headers;
+│   │   │                                   #   explicit CORS; stateless; 401/403 JSON handlers
+│   │   ├── AwsConfig.java                  # SqsClient + SesClient beans; endpoint override for LocalStack
+│   │   └── JacksonConfig.java              # @ConditionalOnMissingBean ObjectMapper + JavaTimeModule
 │   └── utils/
 │       ├── MaskingUtil.java
-│       ├── HashUtil.java                    # sha256Hex(String) — shared by AuthServiceImpl + OtpServiceImpl
-│       ├── Role.java                        # @Deprecated — superseded by RBAC group model
+│       ├── HashUtil.java
+│       ├── Otp.java
+│       ├── LocalStates.java
+│       ├── Role.java                       # @Deprecated — superseded by RBAC group model
 │       ├── UserStatus.java
 │       ├── Gender.java
 │       └── TokenType.java
@@ -797,109 +1077,101 @@ auth/
 ├── src/main/resources/
 │   ├── application.properties
 │   └── db/migration/
-│       ├── V1 – V9  (unchanged)
-│       ├── V10__create_rbac_tables.sql
-│       ├── V11__seed_rbac_banking_data.sql
-│       └── V12__backfill_user_groups.sql
+│       ├── V1 – V12  (unchanged)
+│       ├── V13__create_password_history_table.sql
+│       ├── V14__add_password_changed_at_to_users.sql
+│       └── V15__add_audit_fields_to_user_log.sql
 │
 └── src/test/java/com/shop/auth/
     ├── controller/
-    │   ├── AuthControllerTest.java          # 27 tests — all 4 public auth endpoints
-    │   └── AdminControllerTest.java         # 23 tests — all 13 admin endpoints; standalone MockMvc
+    │   ├── AuthControllerTest.java
+    │   └── AdminControllerTest.java
     ├── filter/
-    │   └── JwtAuthenticationFilterTest.java # 10 tests — no header, valid token, invalid, REFRESH, authorities
+    │   └── JwtAuthenticationFilterTest.java   # Needs update: blacklist check + user-level invalidation tests
     ├── service/impl/
-    │   ├── AuthServiceImplTest.java         # 14 tests — registration (StatusEnforcement removed)
-    │   ├── AuthServiceImplLoginTest.java    # 26 tests — login: tokens, lockout, status, lastLoginAt
-    │   ├── OtpServiceImplTest.java          # 18 tests — full OTP lifecycle
-    │   ├── BankingRoleServiceImplTest.java  # 11 tests — listAll, getById, assignPermission, removePermission
-    │   └── UserGroupServiceImplTest.java    # 15 tests — listAll, getById, assignRole, getUserGroups,
-    │                                        #             addUserToGroup, getEffectivePermissions
+    │   ├── AuthServiceImplTest.java
+    │   ├── AuthServiceImplLoginTest.java       # Needs update: password age check test
+    │   ├── OtpServiceImplTest.java
+    │   ├── BankingRoleServiceImplTest.java
+    │   └── UserGroupServiceImplTest.java
     ├── fixtures/
-    │   ├── RegisterRequestDtoFixture.java   # withStatus() removed
+    │   ├── RegisterRequestDtoFixture.java
     │   ├── LoginRequestDtoFixture.java
     │   └── AddressDtoFixture.java
-    └── MaskingUtilTest.java                 # 13 tests
+    └── MaskingUtilTest.java
 ```
 
 ---
 
-## 13. Test Coverage
+## 15. Test Coverage
 
-Total: **165 tests, 0 failures**.
+**Total: 223 tests, 0 failures.**
 
 | Test Class | Tests | Key Scenarios |
 |---|---|---|
 | `MaskingUtilTest` | 13 | Email/phone masking patterns |
-| `AuthControllerTest` | 27 | Validation, business errors, success paths for all 4 endpoints |
+| `AuthControllerTest` | 27 | Validation, business errors, success paths for all public auth endpoints |
 | `AdminControllerTest` | 23 | 200/204/400/404 for all 13 admin endpoints; standalone MockMvc |
-| `JwtAuthenticationFilterTest` | 10 | No header passes through, valid token sets context, invalid/expired/REFRESH → 401, authorities and groups populated |
+| `JwtAuthenticationFilterTest` | 12 | No header, valid token, invalid/expired/REFRESH → 401, authorities, blacklisted token, user-level session invalidation |
 | `AuthServiceImplTest` | 14 | Registration: password hashing, role default, address linking, duplicate email |
-| `AuthServiceImplLoginTest` | 26 | Login: tokens, UserDto RBAC fields, `lastLoginAt`, lockout, status guards, counter reset |
-| `OtpServiceImplTest` | 18 | Generate+send, verify (success/mismatch/expired/maxAttempts/idempotent), resend (rate-limit/invalidation) |
-| `BankingRoleServiceImplTest` | 11 | listAll, getById, assignPermission (idempotent + 404), removePermission (idempotent + 404) |
-| `UserGroupServiceImplTest` | 15 | listAll, getById, assignRole (idempotent), getUserGroups, addUserToGroup (idempotent), getEffectivePermissions (union + dedup + empty) |
+| `AuthServiceImplLoginTest` | 29 | Login: tokens, `lastLoginAt`, lockout, status guards, counter reset, password age expiry (PCI-DSS 8.3.9) |
+| `AuthServiceImplChangePasswordTest` | 9 | Success path, wrong current password, history violation; token invalidation verified |
+| `AuthServiceImplForgotResetPasswordTest` | 11 | Forgot: found/not-found/email-fails; Reset: token missing, user missing, history violation, success, token consumed |
+| `AuthServiceImplRefreshLogoutTest` | 12 | Refresh: 5 validation failures + rotation; Logout: both tokens, access-only, exception swallowed |
+| `TokenBlacklistServiceImplTest` | 13 | blacklist (TTL guard), isBlacklisted (true/false/null), invalidateAllUserTokens, isUserTokensInvalidated (all branches) |
+| `PasswordPolicyServiceImplTest` | 8 | enforceHistory (no history, no match, match, check-all); recordPasswordChange (saves, no-prune, prune-one, prune-many) |
+| `OtpServiceImplTest` | 18 | Generate+send (SQS publisher), verify, resend (Redis rate limit) |
+| `BankingRoleServiceImplTest` | 11 | listAll, getById, assignPermission (idempotent + 404), removePermission |
+| `UserGroupServiceImplTest` | 15 | listAll, getById, assignRole, getUserGroups, addUserToGroup, getEffectivePermissions |
 | `GlobalExceptionHandlerTest` | 8 | BusinessException, validation, malformed JSON, generic 500 |
 | `AuthApplicationTests` | 1 | Spring context loads |
 
-### Design Principles Applied Across All Tests
-
-- `MockitoSettings(strictness = STRICT_STUBS)` — unused stubs fail the test
-- `MockMvcBuilders.standaloneSetup()` — bypasses Spring Security filter chain; no `@WithMockUser` needed
-- `@InjectMocks` / `@Mock` — no Spring context loading; pure unit tests
-- Idempotency verified with `verify(repo, never()).save(any())` on the no-op paths
-
 ---
 
-## 14. Known Gaps & Future Work
+## 16. Known Gaps & Future Work
 
-### 14.1 Spring Self-Invocation in `resend()`
+### 16.1 Spring Self-Invocation in `resend()`
 
-`OtpServiceImpl.resend()` calls `this.generateAndSend(user)`. Because `generateAndSend` is annotated `@Transactional(REQUIRES_NEW)`, the intent is to run it in its own nested transaction. However, Spring AOP proxies are bypassed on self-invocation — `REQUIRES_NEW` is silently ignored and the call runs within the outer `resend()` `REQUIRED` transaction.
-
-**Practical impact (LOW):** The entire `resend()` operation is atomic. If email fails, all roll back — the resend quota is not consumed. This is functionally correct.
+`OtpServiceImpl.resend()` calls `this.generateAndSend(user)`. `REQUIRES_NEW` is silently ignored on self-invocation due to Spring AOP proxy bypass. Practical impact is LOW — the operation is atomic and functionally correct.
 
 **Future fix:** Extract `generateAndSend` logic into a separate `OtpGeneratorService` bean.
 
-### 14.2 Email Delivery Reliability
+### 16.2 OTP Cleanup Job
 
-Currently relies on synchronous SMTP. In production:
-- Use an async queue (SQS + SES, or RabbitMQ + SendGrid)
-- Add retry with exponential backoff for transient SMTP failures
-- Add dead-letter handling for permanently failed deliveries
+`otp_verification` rows are never deleted. A scheduled job should periodically purge records older than N days.
 
-### 14.3 OTP Cleanup Job
+### 16.3 Profile Edit API
 
-`otp_verification` rows are never deleted. A scheduled job should periodically purge records older than N days (e.g., 30 days).
+`User` and `UserDto` carry optional profile fields ready for a `PATCH /profile` endpoint.
 
-### 14.4 Profile Edit API
+### 16.4 Deprecate `users.role` Column
 
-`User` and `UserDto` carry optional profile fields ready for a `PATCH /profile` endpoint. When implemented:
-- `AddressDto` will need an `id` field for individual address updates.
-- `profilePictureUrl` should be restricted to trusted CDN domains.
-- Password change should be a separate endpoint requiring `currentPassword` verification.
-
-### 14.5 Refresh Token Endpoint
-
-`/auth/refresh` to exchange a valid refresh token for a new access token is not yet implemented. The `user_log` table and `jti` claim support revocation.
-
-### 14.6 V13 — Deprecate `users.role` Column
-
-`Role.java` is already annotated `@Deprecated`. When fully migrated, run:
+`Role.java` is already annotated `@Deprecated`. Future migration:
 
 ```sql
 ALTER TABLE users RENAME COLUMN role TO role_legacy;
-COMMENT ON COLUMN users.role_legacy IS 'DEPRECATED: superseded by user_group_memberships. Remove after 2027-01-01.';
 ```
 
-Then annotate `User.role` field with `@Deprecated` and `@Column(name = "role_legacy")`.
+### 16.5 SQL and TRACE Logging in Production
 
-### 14.7 CSRF
+`application.properties` has `logging.level.org.hibernate.SQL=DEBUG` and `logging.level.org.hibernate.orm.jdbc.bind=TRACE`. These must be `OFF` or `WARN` in production. Use a profile-based `application-prod.properties` to override.
 
-CSRF is disabled in `SecurityConfig`. This is appropriate for a stateless JWT API (no session cookies), but should be documented in security reviews.
+### 16.6 JWT Key Rotation
 
-### 14.8 Rate Limiting at API Gateway Level
+No key rotation strategy exists. If the JWT secret is compromised, all active tokens become invalid simultaneously. Future approach: `kid` claim in JWT header, maintain N previous keys valid during rotation window.
 
-The per-user OTP resend rate limit (3/hour) is enforced in the application layer. For DDoS resilience, add IP-level rate limiting at the API gateway / ingress layer.
+### 16.7 JWT Secret Location
 
+`app.jwt.secret` is an env var string. Production banking requires the signing key to be stored in HashiCorp Vault, AWS KMS, or an HSM.
 
+### 16.8 Concurrent Session Control
+
+A user can hold unlimited active refresh tokens simultaneously (unlimited devices). Banking standard is to cap concurrent sessions (e.g., 3) and revoke the oldest when exceeded. Requires a per-user session registry in Redis.
+
+### 16.9 AD / OIDC Integration
+
+No `UserDetailsService` bean, no `ExternalIdentity` entity, no PKCE support, and no back-channel logout handler exist. Required before adding Active Directory or OIDC (Azure AD, Okta) login.
+
+### 16.10 Audit Event Publishing to SIEM
+
+Security events (login success/failure, password change, account locked, permission change) are currently only in application logs and `user_log`. Banking SIEM requires a structured, immutable event stream. Add a Kafka or SQS publisher for security events.

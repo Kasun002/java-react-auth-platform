@@ -11,6 +11,7 @@ import com.shop.auth.fixtures.RegisterRequestDtoFixture;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.OtpService;
+import com.shop.auth.service.PasswordPolicyService;
 import com.shop.auth.utils.Role;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,10 +42,11 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 class AuthServiceImplTest {
 
-    @Mock private UserRepository      userRepository;
-    @Mock private UserGroupRepository userGroupRepository;
-    @Mock private PasswordEncoder     passwordEncoder;
-    @Mock private OtpService          otpService;    // void mock — silently does nothing, no stub needed
+    @Mock private UserRepository        userRepository;
+    @Mock private UserGroupRepository   userGroupRepository;
+    @Mock private PasswordEncoder       passwordEncoder;
+    @Mock private OtpService            otpService;           // void mock — silently does nothing, no stub needed
+    @Mock private PasswordPolicyService passwordPolicyService; // void mock — recordPasswordChange is a no-op in tests
     @InjectMocks private AuthServiceImpl authService;
 
     // ── Helper ──────────────────────────────────────────────────────────────
