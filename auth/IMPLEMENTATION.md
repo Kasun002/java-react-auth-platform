@@ -1234,14 +1234,20 @@ auth/
 │       └── V15__add_audit_fields_to_user_log.sql
 │
 └── src/test/java/com/shop/auth/
+    ├── AuthApplicationTests.java               # @SpringBootTest context load (H2 + mocked Redis/Mail)
     ├── controller/
     │   ├── AuthControllerTest.java
     │   └── AdminControllerTest.java
     ├── filter/
-    │   └── JwtAuthenticationFilterTest.java   # Needs update: blacklist check + user-level invalidation tests
+    │   └── JwtAuthenticationFilterTest.java    # All 6 filter steps + user-level session invalidation
     ├── service/impl/
     │   ├── AuthServiceImplTest.java
-    │   ├── AuthServiceImplLoginTest.java       # Needs update: password age check test
+    │   ├── AuthServiceImplLoginTest.java        # Login + password age expiry (PCI-DSS 8.3.9)
+    │   ├── AuthServiceImplChangePasswordTest.java
+    │   ├── AuthServiceImplForgotResetPasswordTest.java
+    │   ├── AuthServiceImplRefreshLogoutTest.java
+    │   ├── TokenBlacklistServiceImplTest.java
+    │   ├── PasswordPolicyServiceImplTest.java
     │   ├── OtpServiceImplTest.java
     │   ├── BankingRoleServiceImplTest.java
     │   └── UserGroupServiceImplTest.java
@@ -1256,7 +1262,7 @@ auth/
 
 ## 15. Test Coverage
 
-**Total: 223 tests, 0 failures.**
+**Total: 229 tests, 0 failures.**
 
 | Test Class | Tests | Key Scenarios |
 |---|---|---|
@@ -1275,7 +1281,7 @@ auth/
 | `BankingRoleServiceImplTest` | 11 | listAll, getById, assignPermission (idempotent + 404), removePermission |
 | `UserGroupServiceImplTest` | 15 | listAll, getById, assignRole, getUserGroups, addUserToGroup, getEffectivePermissions |
 | `GlobalExceptionHandlerTest` | 8 | BusinessException, validation, malformed JSON, generic 500 |
-| `AuthApplicationTests` | 1 | Spring context loads |
+| `AuthApplicationTests` | 1 | Spring context loads (H2 + mocked Redis/Mail) |
 
 ---
 
@@ -1326,3 +1332,24 @@ No `UserDetailsService` bean, no `ExternalIdentity` entity, no PKCE support, and
 ### 16.10 Audit Event Publishing to SIEM
 
 Security events (login success/failure, password change, account locked, permission change) are currently only in application logs and `user_log`. Banking SIEM requires a structured, immutable event stream. Add a Kafka or SQS publisher for security events.
+
+### 16.11 Refresh Token Family Tracking (Theft Detection)
+
+If a refresh token is stolen and used by an attacker before the legitimate user rotates it, the attacker receives a valid new pair. The legitimate user's next rotation fails (old token already blacklisted) but there is no automatic detection or alert. A full mitigation requires **token family tracking**: store a `family_id` per token lineage; if a token from a revoked family is used, immediately invalidate the entire family.
+
+### 16.12 Cross-Service JWT Validation
+
+No documentation exists on how other microservices in `fp-be` validate tokens issued by this service. Options — shared secret (`app.jwt.secret` propagated via config server), API gateway validation (Spring Cloud Gateway + this service's `JwtAuthenticationFilter`), or token introspection endpoint (`GET /auth/introspect`). Architectural decision must be made before adding downstream services.
+
+### 16.13 Concurrent Session Cap
+
+A user can hold unlimited simultaneous refresh tokens (unlimited devices). Banking standards typically cap this (e.g., 3 concurrent sessions) and revoke the oldest when the cap is exceeded. Requires a per-user session registry in Redis: `user:sessions:<userId>` → sorted set of JTIs by `iat`.
+
+### 16.14 Local Development Setup
+
+No Docker Compose file exists for the required external services. A senior developer joining the project needs to manually provision:
+- PostgreSQL on port 5433 (database: `auth_db`, user/pass: `admin/admin`)
+- Redis on port 6379
+- LocalStack on port 4566 (SQS queue: `otp-email-queue`)
+
+**Future fix:** Add `docker-compose.yml` at repository root with all three services.
