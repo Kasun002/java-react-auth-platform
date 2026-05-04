@@ -395,49 +395,54 @@ All assign operations are **idempotent** — no error if already assigned. All r
 
 ## 4. Registration Flow
 
-```
-POST /auth/register
-        │
-        ▼
-  [Validation] @Valid on RegisterRequestDto
-  [@StrongPassword] complexity: 12+ chars, upper, lower, digit, special
-        │
-        ▼
-  [Duplicate check] userRepository.existsByEmail()
-        │  ── email taken ──► 409 EmailAlreadyExistsException
-        │
-        ▼
-  [Build User] status=NEW, password=BCrypt(password), role=USER (default)
-               passwordChangedAt=now()
-        │
-        ▼
-  [Persist] userRepository.save(user)
-        │
-        ▼
-  [Seed password history] passwordPolicyService.recordPasswordChange(user, encodedPassword)
-  (seeds first entry so future change-password can enforce no-reuse from day one)
-        │
-        ▼
-  [Auto-assign default group]
-  userGroupRepository.findByName("RETAIL_CUSTOMER").ifPresentOrElse(
-      group -> { user.getGroups().add(group); userRepository.save(user); },
-      () -> log.warn(...)   ← graceful degradation; never throws
-  )
-        │
-        ▼
-  [OTP: REQUIRES_NEW transaction]
-        │   otpService.generateAndSend(user)
-        │       ├── invalidateAllUnusedForUser(user)
-        │       ├── generateRawOtp()                   ← SecureRandom, 000000–999999
-        │       ├── save(OtpVerification{hash, expiry}) ← SHA-256 hash stored, not raw OTP
-        │       └── otpEmailPublisher.publish(OtpEmailMessage)  ── async via SQS ──►
-        │                                                         OtpEmailConsumer (virtual thread)
-        │                                                              └── SesClient.sendEmail()
-        │  If publisher throws → REQUIRES_NEW rolls back OTP record only.
-        │  User and group membership already committed. Caller must use /resend-otp.
-        │
-        ▼
-  201 CREATED  { status: SUCCESS, message: "Registration successful. An OTP has been sent..." }
+```mermaid
+flowchart TD
+
+%% دخول
+A["POST /auth/register"] --> B["@Valid RegisterRequestDto\n@StrongPassword"]
+
+%% Validation
+B --> C{"Email exists?"}
+C -- Yes --> X["409 EmailAlreadyExistsException"]
+C -- No --> D["Build User\nstatus=NEW\nBCrypt(password)\nrole=USER\npasswordChangedAt=now()"]
+
+%% Persistence
+D --> E["Save User"]
+E --> F["Seed Password History\nrecordPasswordChange()"]
+
+%% Group assignment
+F --> G["Assign Default Group\nRETAIL_CUSTOMER"]
+
+%% OTP Transaction
+G --> H["OTP Flow (REQUIRES_NEW)"]
+
+subgraph OTP_Process
+  H --> I["Invalidate unused OTPs"]
+  I --> J["Generate OTP (SecureRandom)"]
+  J --> K["Hash OTP (SHA-256) & Save"]
+  K --> L["Publish OTP Email (SQS)"]
+
+  L --> M["OtpEmailConsumer\n(Virtual Thread)"]
+  M --> N["Send Email via SES"]
+end
+
+%% Failure case
+L -. failure .-> O["Rollback OTP only\n(User already committed)"]
+
+%% Response
+N --> P["201 CREATED\nRegistration successful"]
+O --> Q["Client must call /resend-otp"]
+
+%% Styling (optional clarity)
+classDef success fill:#4CAF50,color:#fff
+classDef error fill:#F44336,color:#fff
+classDef process fill:#2196F3,color:#fff
+classDef async fill:#9C27B0,color:#fff
+
+class P success
+class X error
+class D,E,F,G,H,I,J,K process
+class L,M,N async
 ```
 
 ---
