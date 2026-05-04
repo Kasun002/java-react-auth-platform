@@ -1,0 +1,76 @@
+# ── Bootstrap LDIF for OpenLDAP (local dev / CI) ──────────────────────────────
+# Loaded automatically by osixia/openldap on first start.
+# Base DN: dc=corp,dc=example,dc=com  (set by LDAP_DOMAIN=corp.example.com)
+#
+# Structure:
+#   ou=users  — user accounts (mail attribute = login email)
+#   ou=groups — group entries (member attribute = user DN)
+#   ou=service — service accounts (e.g. svc-ldap for application bind)
+
+# ── Organisational units ────────────────────────────────────────────────────
+
+dn: ou=users,dc=corp,dc=example,dc=com
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=corp,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+dn: ou=service,dc=corp,dc=example,dc=com
+objectClass: organizationalUnit
+ou: service
+
+# ── Service account (application bind) ─────────────────────────────────────
+
+dn: cn=svc-ldap,ou=service,dc=corp,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: svc-ldap
+sn: LDAP Service Account
+mail: svc-ldap@corp.example.com
+userPassword: svc-password
+
+# ── Sample users ────────────────────────────────────────────────────────────
+
+dn: cn=Alice Retail,ou=users,dc=corp,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: Alice Retail
+sn: Retail
+mail: alice@corp.example.com
+userPassword: Alice@Pass1!
+
+dn: cn=Bob Staff,ou=users,dc=corp,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: Bob Staff
+sn: Staff
+mail: bob@corp.example.com
+userPassword: Bob@Pass1!
+
+dn: cn=Carol Admin,ou=users,dc=corp,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: Carol Admin
+sn: Admin
+mail: carol@corp.example.com
+userPassword: Carol@Pass1!
+
+# ── Sample groups ────────────────────────────────────────────────────────────
+# cn value = adGroupId used in ad_group_mappings table
+# Map these in the admin UI or via POST /admin/ad/group-mappings
+
+dn: cn=GRP-RETAIL-CUSTOMERS,ou=groups,dc=corp,dc=example,dc=com
+objectClass: groupOfNames
+cn: GRP-RETAIL-CUSTOMERS
+description: Azure AD group for retail banking customers
+member: cn=Alice Retail,ou=users,dc=corp,dc=example,dc=com
+
+dn: cn=GRP-BANK-STAFF,ou=groups,dc=corp,dc=example,dc=com
+objectClass: groupOfNames
+cn: GRP-BANK-STAFF
+description: Azure AD group for bank staff members
+member: cn=Bob Staff,ou=users,dc=corp,dc=example,dc=com
+
+dn: cn=GRP-SYSTEM-ADMINS,ou=groups,dc=corp,dc=example,dc=com
+objectClass: groupOfNames
+cn: GRP-SYSTEM-ADMINS
+description: Azure AD group for system administrators
+member: cn=Carol Admin,ou=users,dc=corp,dc=example,dc=com

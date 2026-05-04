@@ -1,8 +1,8 @@
 # Auth Service — Full Implementation Reference
 
 > **Project:** fp-be / auth microservice
-> **Stack:** Java 21 · Spring Boot 4.0.6 · PostgreSQL · Flyway · JWT (jjwt 0.12.x) · Spring Mail · Spring Security 6 · Redis 7 · AWS SDK v2 (SQS + SES)
-> **Last updated:** 2026-05-03
+> **Stack:** Java 21 · Spring Boot 4.0.6 · PostgreSQL · Flyway · JWT (jjwt 0.12.x) · Spring Mail · Spring Security 6 · Redis 7 · AWS SDK v2 (SQS + SES) · Spring Security OAuth2 JOSE · Spring LDAP
+> **Last updated:** 2026-05-04
 
 ---
 
@@ -24,6 +24,7 @@
 14. [File Map](#14-file-map)
 15. [Test Coverage](#15-test-coverage)
 16. [Known Gaps & Future Work](#16-known-gaps--future-work)
+17. [Azure AD / OIDC Login](#17-azure-ad--oidc-login)
 
 ---
 
@@ -42,21 +43,42 @@ class JwtAuthenticationFilter security
 %% ========== Controllers ==========
 JwtAuthenticationFilter --> AuthController
 JwtAuthenticationFilter --> AdminController
+JwtAuthenticationFilter --> AdAuthController
+JwtAuthenticationFilter --> AdAdminController
 
 AuthController["AuthController\nPOST /auth/**"]
 AdminController["AdminController\nGET|POST|DELETE /admin/**"]
+AdAuthController["AdAuthController\nPOST /auth/ad/login"]
+AdAdminController["AdAdminController\nGET|POST|PUT|DELETE /admin/ad/**"]
 
-class AuthController,AdminController controller
+class AuthController,AdminController,AdAuthController,AdAdminController controller
 
 %% ========== Auth Service ==========
 AuthController --> AuthService
 AdminController --> AuthService
+AdAuthController --> AdAuthService
+AdAdminController --> AdGroupMappingService
 
 subgraph Auth_Layer
   AuthService["AuthService / Impl\nregister | login | OTP | refresh | logout | password flows"]
 end
 
+subgraph AD_Auth_Layer
+  AdAuthService["AdAuthService / Impl\nvalidate OIDC token | provision user | sync groups | issue JWT"]
+  AdGroupMappingService["AdGroupMappingService / Impl\nresolveLocalGroups | CRUD mappings"]
+  AdLdapGroupService["AdLdapGroupService / Impl\nLDAP group lookup (Spring LDAP)"]
+  AzureAD["Azure AD / Keycloak\nJWKS endpoint"]
+  OpenLDAP["OpenLDAP / AD DS\ncorporate directory"]
+
+  AdAuthService --> AdGroupMappingService
+  AdAuthService --> AdLdapGroupService
+  AdAuthService --> AzureAD
+  AdLdapGroupService --> OpenLDAP
+end
+
 class AuthService service
+class AdAuthService,AdGroupMappingService,AdLdapGroupService service
+class AzureAD,OpenLDAP external
 
 %% ========== OTP ==========
 subgraph OTP_Module
@@ -199,6 +221,8 @@ All business exceptions extend `BusinessException` which carries an `HttpStatus`
 | V13 | `V13__create_password_history_table.sql` | Password history table (BCrypt hashes, last 12) |
 | V14 | `V14__add_password_changed_at_to_users.sql` | `password_changed_at` timestamp on users (PCI-DSS 8.3.9) |
 | V15 | `V15__add_audit_fields_to_user_log.sql` | `ip_address`, `user_agent` on user_log (PCI-DSS 10.2.4/10.2.7) |
+| V16 | `V16__create_ad_group_mappings.sql` | `ad_group_mappings` table — AD group ↔ local UserGroup mapping |
+| V17 | `V17__add_ad_fields_to_users.sql` | `ad_object_id` + `auth_provider` columns on users table |
 
 ### `users` Table
 
@@ -218,8 +242,27 @@ date_of_birth         DATE          NULL
 gender                VARCHAR(50)   NULL            -- MALE | FEMALE | OTHER | PREFER_NOT_TO_SAY
 profile_picture_url   VARCHAR(1024) NULL
 last_login_at         TIMESTAMP     NULL            -- updated on every successful login
+-- AD / SSO identity (V17) — null for LOCAL users
+ad_object_id          VARCHAR(255)  NULL            -- Azure AD Object ID ("oid" claim); partial unique index
+auth_provider         VARCHAR(50)   NOT NULL DEFAULT 'LOCAL'  -- LOCAL | AZURE_AD
 created_at            TIMESTAMP     NOT NULL
 updated_at            TIMESTAMP     NOT NULL
+```
+
+### `ad_group_mappings` Table (V16)
+
+Maps an Azure AD / LDAP group to a local UserGroup.
+
+```sql
+id              BIGSERIAL     PRIMARY KEY
+ad_group_id     VARCHAR(255)  NOT NULL UNIQUE  -- Azure AD Object ID or LDAP CN
+ad_group_name   VARCHAR(255)  NULL             -- informational display name
+local_group_id  BIGINT        REFERENCES user_groups(id) ON DELETE SET NULL
+auto_created    BOOLEAN       NOT NULL DEFAULT FALSE
+created_at      TIMESTAMP     NOT NULL DEFAULT NOW()
+updated_at      TIMESTAMP     NOT NULL DEFAULT NOW()
+
+INDEX idx_ad_group_mappings_local_group ON ad_group_mappings(local_group_id)
 ```
 
 ### `password_history` Table (V13)
@@ -323,6 +366,7 @@ updated_at  TIMESTAMP    NOT NULL
 | `POST` | `/auth/verify-otp` | 200 | Verify OTP; account → ACTIVE |
 | `POST` | `/auth/resend-otp` | 200 | Resend OTP (max 3/hour; Redis rate-limited) |
 | `POST` | `/auth/login` | 200 | Authenticate; return JWT pair + UserDto |
+| `POST` | `/auth/ad/login` | 200 | Exchange Azure AD OIDC ID token for service JWT pair |
 | `POST` | `/auth/refresh` | 200 | Exchange refresh token for new token pair (rotation) |
 | `POST` | `/auth/forgot-password` | 200 | Send password reset email (always 200 — no enumeration) |
 | `POST` | `/auth/reset-password` | 200 | Reset password using single-use token from email |
@@ -353,6 +397,16 @@ updated_at  TIMESTAMP    NOT NULL
 | `GET` | `/admin/users/{userId}/permissions` | `USER_GROUPS_MANAGE` | Get user's effective permission set |
 
 All assign operations are **idempotent** — no error if already assigned. All remove operations are **idempotent** — no error if not present.
+
+### AD Admin — `/admin/ad/**` (valid ACCESS token + `AD_GROUP_MANAGE` permission)
+
+| Method | Path | Status | Description |
+|--------|------|--------|-------------|
+| `GET` | `/admin/ad/group-mappings` | 200 | List all AD group ↔ local UserGroup mappings |
+| `GET` | `/admin/ad/group-mappings/{id}` | 200 | Get a single mapping by ID |
+| `POST` | `/admin/ad/group-mappings` | 201 | Create a manual AD group mapping |
+| `PUT` | `/admin/ad/group-mappings/{id}` | 200 | Change the local group for an existing mapping |
+| `DELETE` | `/admin/ad/group-mappings/{id}` | 204 | Delete a mapping |
 
 ### `POST /auth/register` — Request Body
 
@@ -1114,6 +1168,8 @@ auth/
 │   │   ├── AuthController.java              # register, login, verify-otp, resend-otp,
 │   │   │                                   #   refresh, logout, change-password,
 │   │   │                                   #   forgot-password, reset-password
+│   │   ├── AdAuthController.java           # POST /auth/ad/login
+│   │   ├── AdAdminController.java          # GET|POST|PUT|DELETE /admin/ad/group-mappings/**
 │   │   └── AdminController.java            # 13 admin endpoints under /admin/**
 │   ├── filter/
 │   │   └── JwtAuthenticationFilter.java    # 6-step validation: sig, type, JTI blacklist,
@@ -1122,6 +1178,9 @@ auth/
 │   │   └── UserPrincipal.java              # Implements UserDetails; built from JWT claims (no DB)
 │   ├── service/
 │   │   ├── AuthService.java
+│   │   ├── AdAuthService.java              # AD login: validate token, provision user, issue JWT
+│   │   ├── AdGroupMappingService.java      # resolveLocalGroups + admin CRUD
+│   │   ├── AdLdapGroupService.java         # LDAP group lookup (LdapGroup record)
 │   │   ├── OtpService.java
 │   │   ├── EmailService.java               # sendOtp() + sendPasswordResetEmail()
 │   │   ├── JwtService.java                 # + extractJti(), extractIssuedAt()
@@ -1135,6 +1194,10 @@ auth/
 │   │   └── impl/
 │   │       ├── AuthServiceImpl.java        # All auth flows; persistUserLog pulls IP/UA
 │   │       │                               #   via RequestContextHolder
+│   │       ├── AdAuthServiceImpl.java      # NimbusJwtDecoder (JWKS); user provision;
+│   │       │                               #   LDAP group sync; JWT issue
+│   │       ├── AdGroupMappingServiceImpl.java  # AUTO_CREATE | DEFAULT | SKIP strategy
+│   │       ├── AdLdapGroupServiceImpl.java    # LdapContextSource + LdapTemplate
 │   │       ├── OtpServiceImpl.java
 │   │       ├── EmailServiceImpl.java
 │   │       ├── JwtServiceImpl.java
@@ -1151,16 +1214,18 @@ auth/
 │   │   └── impl/
 │   │       └── OtpEmailPublisherImpl.java  # SqsClient + ObjectMapper
 │   ├── entity/
-│   │   ├── User.java                       # + passwordChangedAt (V14)
+│   │   ├── User.java                       # + passwordChangedAt (V14); + adObjectId, authProvider (V17)
 │   │   ├── Address.java
 │   │   ├── UserLog.java                    # + ipAddress, userAgent (V15)
 │   │   ├── OtpVerification.java
 │   │   ├── PasswordHistory.java            # BCrypt hash + user + createdAt (V13)
+│   │   ├── AdGroupMapping.java             # AD group ↔ local UserGroup mapping (V16)
 │   │   ├── Permission.java
 │   │   ├── BankingRole.java
 │   │   └── UserGroup.java
 │   ├── repository/
-│   │   ├── UserRepository.java
+│   │   ├── UserRepository.java             # + findByAdObjectId(String)
+│   │   ├── AdGroupMappingRepository.java   # findByAdGroupId, findByAdGroupIdIn
 │   │   ├── UserLogRepository.java
 │   │   ├── OtpVerificationRepository.java
 │   │   ├── PasswordHistoryRepository.java  # findRecentByUser, findAllIdsByUser, deleteByIdIn
@@ -1171,6 +1236,10 @@ auth/
 │   │   ├── RegisterRequestDto.java         # @StrongPassword replaces @Size(min=8)
 │   │   ├── LoginRequestDto.java
 │   │   ├── LoginResponseDto.java
+│   │   ├── AdLoginRequestDto.java          # idToken @NotBlank
+│   │   ├── AdGroupMappingDto.java          # read DTO for ad_group_mappings
+│   │   ├── CreateAdGroupMappingRequestDto.java
+│   │   ├── UpdateAdGroupMappingRequestDto.java
 │   │   ├── RefreshTokenRequestDto.java     # refreshToken @NotBlank
 │   │   ├── RefreshTokenResponseDto.java    # accessToken + refreshToken
 │   │   ├── LogoutRequestDto.java           # refreshToken (optional but recommended)
@@ -1189,6 +1258,7 @@ auth/
 │   │   ├── AssignRoleToGroupRequestDto.java
 │   │   └── AssignGroupRequestDto.java
 │   ├── exception/
+│   │   ├── AdAuthenticationException.java        # 401 — AD token invalid / AD disabled
 │   │   ├── BusinessException.java
 │   │   ├── EmailAlreadyExistsException.java      # 409
 │   │   ├── InvalidCredentialsException.java      # 401
@@ -1213,9 +1283,14 @@ auth/
 │   ├── config/
 │   │   ├── SecurityConfig.java             # @EnableMethodSecurity; 6-step filter; security headers;
 │   │   │                                   #   explicit CORS; stateless; 401/403 JSON handlers
+│   │   │                                   #   + /auth/ad/login in permitAll list
+│   │   ├── AdAuthProperties.java           # @ConfigurationProperties(prefix="app.ad")
+│   │   │                                   #   enabled, jwksUri, issuer, audience,
+│   │   │                                   #   unmappedGroupStrategy, defaultGroupName, LdapConfig
 │   │   ├── AwsConfig.java                  # SqsClient + SesClient beans; endpoint override for LocalStack
 │   │   └── JacksonConfig.java              # @ConditionalOnMissingBean ObjectMapper + JavaTimeModule
 │   └── utils/
+│       ├── AuthProvider.java               # LOCAL | AZURE_AD
 │       ├── MaskingUtil.java
 │       ├── HashUtil.java
 │       ├── Otp.java
@@ -1231,7 +1306,15 @@ auth/
 │       ├── V1 – V12  (unchanged)
 │       ├── V13__create_password_history_table.sql
 │       ├── V14__add_password_changed_at_to_users.sql
-│       └── V15__add_audit_fields_to_user_log.sql
+│       ├── V15__add_audit_fields_to_user_log.sql
+│       ├── V16__create_ad_group_mappings.sql
+│       └── V17__add_ad_fields_to_users.sql
+│
+├── docker/
+│   ├── keycloak/
+│   │   └── README.md                       # Keycloak realm + client setup for local AD simulation
+│   └── ldap/
+│       └── bootstrap.ldif                  # OpenLDAP seed: OUs, service account, sample users & groups
 │
 └── src/test/java/com/shop/auth/
     ├── AuthApplicationTests.java               # @SpringBootTest context load (H2 + mocked Redis/Mail)
@@ -1325,9 +1408,13 @@ No key rotation strategy exists. If the JWT secret is compromised, all active to
 
 A user can hold unlimited active refresh tokens simultaneously (unlimited devices). Banking standard is to cap concurrent sessions (e.g., 3) and revoke the oldest when exceeded. Requires a per-user session registry in Redis.
 
-### 16.9 AD / OIDC Integration
+### 16.9 AD / OIDC Integration ✅ Implemented
 
-No `UserDetailsService` bean, no `ExternalIdentity` entity, no PKCE support, and no back-channel logout handler exist. Required before adding Active Directory or OIDC (Azure AD, Okta) login.
+`POST /auth/ad/login` validates Azure AD OIDC ID tokens via NimbusJwtDecoder (JWKS), provisions users on first login, syncs LDAP group memberships, and issues the service's own JWT pair. See [Section 17](#17-azure-ad--oidc-login).
+
+**Remaining gaps:**
+- Back-channel logout (token revocation when Azure AD session ends) — not implemented.
+- PKCE is handled client-side; the service only validates the resulting ID token.
 
 ### 16.10 Audit Event Publishing to SIEM
 
@@ -1345,11 +1432,152 @@ No documentation exists on how other microservices in `fp-be` validate tokens is
 
 A user can hold unlimited simultaneous refresh tokens (unlimited devices). Banking standards typically cap this (e.g., 3 concurrent sessions) and revoke the oldest when the cap is exceeded. Requires a per-user session registry in Redis: `user:sessions:<userId>` → sorted set of JTIs by `iat`.
 
-### 16.14 Local Development Setup
+### 16.14 Local Development Setup ✅ Implemented
 
-No Docker Compose file exists for the required external services. A senior developer joining the project needs to manually provision:
-- PostgreSQL on port 5433 (database: `auth_db`, user/pass: `admin/admin`)
-- Redis on port 6379
-- LocalStack on port 4566 (SQS queue: `otp-email-queue`)
+`docker-compose.yml` at repository root provides all required services:
+- PostgreSQL on 5433 (auth_db), 5434 (product_db)
+- Redis on 6379
+- pgAdmin on 5050
+- Keycloak on 8180 (Azure AD simulation)
+- OpenLDAP on 389/636 (corporate LDAP simulation)
+- phpLDAPadmin on 6443 (LDAP browser UI)
 
-**Future fix:** Add `docker-compose.yml` at repository root with all three services.
+See `auth/docker/keycloak/README.md` for one-time Keycloak realm setup.
+
+---
+
+## 17. Azure AD / OIDC Login
+
+### Overview
+
+The AD login flow allows users authenticated by Azure Active Directory (corporate SSO) to exchange an OIDC ID token for this service's own short-lived JWT pair.  A separate controller and service keep the AD flow completely isolated from the existing password-based login.
+
+### Architecture
+
+```
+Browser / SPA
+    │  1. MSAL PKCE → Azure AD (or Keycloak in dev)
+    │  2. Receive OIDC ID token
+    │
+    ▼
+POST /auth/ad/login  { "idToken": "<oidc-id-token>" }
+    │
+    ▼
+AdAuthController → AdAuthServiceImpl
+    │
+    ├── 1. Check app.ad.enabled (503 if false)
+    ├── 2. NimbusJwtDecoder.decode(idToken)
+    │       verifies: RS256 signature via JWKS, expiry, iss, aud
+    ├── 3. Extract: oid (or sub) → adObjectId; email/upn → userEmail; name
+    ├── 4. findOrProvisionUser (by adObjectId → by email → create)
+    ├── 5. Check status (INACTIVE/DELETED → 401)
+    ├── 6. syncGroups:
+    │       AdLdapGroupService.getGroupsForUser(email)
+    │           → LdapContextSource + LdapTemplate → two-step LDAP search
+    │       AdGroupMappingService.resolveLocalGroups(ldapGroups)
+    │           → per unmappedGroupStrategy: AUTO_CREATE | DEFAULT | SKIP
+    │       user.groups.clear(); user.groups.addAll(resolved)
+    ├── 7. user.lastLoginAt = now(); userRepository.save(user)
+    ├── 8. jwtService.generateAccessToken(user)
+    │          jwtService.generateRefreshToken(user)
+    ├── 9. persistUserLog (SHA-256 hash of each token, IP, UA)
+    └── 10. return LoginResponseDto { accessToken, refreshToken, user }
+```
+
+### Unmapped Group Strategy
+
+Configured via `app.ad.unmapped-group-strategy`:
+
+| Strategy | Behaviour |
+|---|---|
+| `AUTO_CREATE` | Creates a local UserGroup named after the AD group (uppercased, special chars → `_`) and records the mapping. Subsequent logins use the mapping directly. |
+| `DEFAULT` | Assigns the user to `app.ad.default-group-name` (default: `RETAIL_CUSTOMER`). |
+| `SKIP` | Ignores unmapped AD groups. User only gets groups that have explicit mappings. |
+
+### User Provisioning Rules
+
+| Scenario | Action |
+|---|---|
+| `adObjectId` matches existing user | Update email + name; preserve existing record |
+| Email matches existing local user | Adopt AD identity: set `adObjectId` + `authProvider=AZURE_AD` |
+| First-time AD login | Create user: `status=ACTIVE`, `authProvider=AZURE_AD`, random unguessable password |
+
+**Local login is blocked for `AZURE_AD` users** — their `password` column holds `$AD$<UUID>` which is not a valid BCrypt hash, so `passwordEncoder.matches()` always returns false.
+
+### Key Configuration Properties
+
+```properties
+# Master switch
+app.ad.enabled=true
+
+# OIDC token validation
+app.ad.jwks-uri=https://login.microsoftonline.com/{tenantId}/discovery/v2.0/keys
+app.ad.issuer=https://login.microsoftonline.com/{tenantId}/v2.0
+app.ad.audience={clientId}
+
+# Group resolution
+app.ad.unmapped-group-strategy=AUTO_CREATE   # AUTO_CREATE | DEFAULT | SKIP
+app.ad.default-group-name=RETAIL_CUSTOMER
+
+# LDAP
+app.ad.ldap.url=ldap://corp-ldap:389
+app.ad.ldap.base=dc=corp,dc=example,dc=com
+app.ad.ldap.user-dn=cn=svc-ldap,ou=service,dc=corp,dc=example,dc=com
+app.ad.ldap.password=<service-account-password>
+app.ad.ldap.group-search-base=ou=groups,dc=corp,dc=example,dc=com
+app.ad.ldap.group-search-filter=(member={0})   # {0} = user DN
+app.ad.ldap.user-search-base=ou=users,dc=corp,dc=example,dc=com
+app.ad.ldap.user-search-filter=(mail={0})      # {0} = user email
+```
+
+### Local Development with Docker
+
+```bash
+# Start all services (Keycloak + OpenLDAP + auth-db + Redis)
+docker compose up -d
+
+# Follow Keycloak setup: auth/docker/keycloak/README.md
+
+# Get an ID token from Keycloak
+ID_TOKEN=$(curl -s -X POST http://localhost:8180/realms/corporate/protocol/openid-connect/token \
+  -d 'grant_type=password' \
+  -d 'client_id=fp-auth-client' \
+  -d 'username=alice@corp.example.com' \
+  -d 'password=Alice@Pass1!' | jq -r '.id_token')
+
+# Exchange for service JWT pair
+curl -s -X POST http://localhost:8080/auth/ad/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"idToken\": \"$ID_TOKEN\"}" | jq
+```
+
+Enable AD mode in `application.properties` (or set env vars):
+```properties
+app.ad.enabled=true
+app.ad.jwks-uri=http://localhost:8180/realms/corporate/protocol/openid-connect/certs
+app.ad.issuer=http://localhost:8180/realms/corporate
+app.ad.audience=fp-auth-client
+app.ad.ldap.url=ldap://localhost:389
+app.ad.ldap.password=svc-password
+```
+
+### Azure AD (Production)
+
+Replace Keycloak URLs with tenant-specific Azure AD endpoints:
+```properties
+app.ad.jwks-uri=https://login.microsoftonline.com/{tenantId}/discovery/v2.0/keys
+app.ad.issuer=https://login.microsoftonline.com/{tenantId}/v2.0
+app.ad.audience={applicationClientId}
+```
+
+LDAP stays the same but points to Azure AD DS or the corporate on-premise domain controller.
+
+### Production Checklist (AD Login)
+
+- [ ] `app.ad.jwks-uri` points to production Azure AD tenant keys
+- [ ] `app.ad.audience` matches the production App Registration client ID
+- [ ] LDAP service account password stored in Vault / Secrets Manager (not in properties file)
+- [ ] LDAPS (`ldaps://`) used in production (TLS for all LDAP traffic)
+- [ ] `unmappedGroupStrategy` is deliberately set — `AUTO_CREATE` may grant unintended access in production
+- [ ] `AD_GROUP_MANAGE` permission assigned to the admin group responsible for mapping maintenance
+- [ ] Verify V16 migration: `SELECT count(*) FROM ad_group_mappings` after first AD logins

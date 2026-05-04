@@ -97,6 +97,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/auth/register",
                     "/auth/login",
+                    "/auth/ad/login",
                     "/auth/verify-otp",
                     "/auth/resend-otp",
                     "/auth/refresh",

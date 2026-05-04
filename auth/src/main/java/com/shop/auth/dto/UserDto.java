@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.Gender;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
@@ -41,6 +42,9 @@ public class UserDto {
 
     @Schema(description = "User role", example = "USER")
     private Role role;
+
+    @Schema(description = "How this account was originally provisioned", example = "LOCAL")
+    private AuthProvider authProvider;
 
     // ── Optional profile fields ───────────────────────────────────────────────
 

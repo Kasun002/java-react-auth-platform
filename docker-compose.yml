@@ -34,3 +34,53 @@ services:
     depends_on:
       - auth-db
       - product-db
+
+  # ── Azure AD simulation ────────────────────────────────────────────────────
+  # Keycloak simulates Azure AD for local development.
+  # Admin UI: http://localhost:8180  (admin / admin)
+  # JWKS:     http://localhost:8180/realms/corporate/protocol/openid-connect/certs
+  # Issuer:   http://localhost:8180/realms/corporate
+  # See auth/docker/keycloak/README.md for realm setup instructions.
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak
+    command: start-dev
+    environment:
+      KC_DB: dev-mem
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8180
+    ports:
+      - "8180:8180"
+
+  # ── Corporate LDAP simulation ──────────────────────────────────────────────
+  # OpenLDAP simulates a corporate Active Directory LDAP for group sync.
+  # Base DN: dc=corp,dc=example,dc=com
+  # Admin DN: cn=admin,dc=corp,dc=example,dc=com  password: admin
+  # Bootstrap LDIF: auth/docker/ldap/bootstrap.ldif (loaded at first start)
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: openldap
+    environment:
+      LDAP_ORGANISATION: "Corp Example"
+      LDAP_DOMAIN: corp.example.com
+      LDAP_ADMIN_PASSWORD: admin
+      # Mount LDIF to a staging path; container copies to custom/ and deletes after seeding
+      LDAP_SEED_INTERNAL_LDIF_PATH: /ldif-seed
+    volumes:
+      - ./auth/docker/ldap/bootstrap.ldif:/ldif-seed/bootstrap.ldif:ro
+    ports:
+      - "389:389"
+      - "636:636"
+
+  # phpLDAPadmin — browser UI for inspecting / managing OpenLDAP
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "6443:80"
+    depends_on:
+      - openldap

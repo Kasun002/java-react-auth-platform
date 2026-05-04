@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.Gender;
 import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
@@ -107,6 +108,19 @@ public class User {
         inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<BankingRole> directRoles = new HashSet<>();
+
+    // ── Azure AD / SSO identity ───────────────────────────────────────────────
+
+    /**
+     * Azure AD Object ID ("oid" claim).  Null for LOCAL users.
+     * Partial unique index in DB (WHERE ad_object_id IS NOT NULL).
+     */
+    @Column(nullable = true, length = 255)
+    private String adObjectId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private AuthProvider authProvider = AuthProvider.LOCAL;
 
     // ── Security / audit ──────────────────────────────────────────────────────
 

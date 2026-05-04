@@ -556,6 +556,7 @@ public class AuthServiceImpl implements AuthService {
         dto.setPhone(user.getPhone());
         dto.setStatus(user.getStatus());
         dto.setRole(user.getRole());
+        dto.setAuthProvider(user.getAuthProvider());
         dto.setDateOfBirth(user.getDateOfBirth());
         dto.setGender(user.getGender());
         dto.setProfilePictureUrl(user.getProfilePictureUrl());
