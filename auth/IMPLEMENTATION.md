@@ -171,7 +171,7 @@ classDef cache fill:#00BCD4,stroke:#00838F,color:#fff
 classDef security fill:#F44336,stroke:#B71C1C,color:#fff
 classDef util fill:#607D8B,stroke:#37474F,color:#fff
 classDef external fill:#795548,stroke:#3E2723,color:#fff
-
+```
 
 All business exceptions extend `BusinessException` which carries an `HttpStatus`.
 `GlobalExceptionHandler` translates them into a uniform `ResponseDto<Void>` JSON body.
