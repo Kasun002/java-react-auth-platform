@@ -61,14 +61,13 @@ services:
   openldap:
     image: osixia/openldap:1.5.0
     container_name: openldap
+    command: ["--copy-service"]
     environment:
       LDAP_ORGANISATION: "Corp Example"
       LDAP_DOMAIN: corp.example.com
       LDAP_ADMIN_PASSWORD: admin
-      # Mount LDIF to a staging path; container copies to custom/ and deletes after seeding
-      LDAP_SEED_INTERNAL_LDIF_PATH: /ldif-seed
     volumes:
-      - ./auth/docker/ldap/bootstrap.ldif:/ldif-seed/bootstrap.ldif:ro
+      - ./auth/docker/ldap/bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/bootstrap.ldif
     ports:
       - "389:389"
       - "636:636"
