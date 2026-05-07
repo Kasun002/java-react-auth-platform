@@ -29,3 +29,20 @@ export interface ApiResponse<T> {
   data: T | null;
   errors: string[] | null;
 }
+
+export interface AddressRequest {
+  addressLine1: string;
+  addressLine2?: string;
+  street?: string;
+  postalCode?: string;
+  state?: string;
+  country: string;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+  addresses: AddressRequest[];
+}

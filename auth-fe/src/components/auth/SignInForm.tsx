@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
-import Label from "../form/Label";
-import Input from "../form/input/InputField";
-import Checkbox from "../form/input/Checkbox";
-import Button from "../ui/button/Button";
 import { useAuth } from "../../context/AuthContext";
+import { EyeCloseIcon, EyeIcon } from "../../icons";
 import { localLogin } from "../../services/authService";
-import { generateCodeVerifier, generateCodeChallenge } from "../../utils/pkce";
+import { generateCodeChallenge, generateCodeVerifier } from "../../utils/pkce";
+import Label from "../form/Label";
+import Checkbox from "../form/input/Checkbox";
+import Input from "../form/input/InputField";
+import Button from "../ui/button/Button";
 
 const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL;
 const REALM = import.meta.env.VITE_KEYCLOAK_REALM;
@@ -32,6 +32,10 @@ export default function SignInForm() {
   const [error, setError] = useState<string | null>(
     AD_ERROR_MESSAGES[searchParams.get("error") ?? ""] ?? null,
   );
+  const success =
+    searchParams.get("registered") === "true"
+      ? "Account created! Check your email for a verification OTP, then sign in."
+      : null;
   const [loading, setLoading] = useState(false);
   const [adLoading, setAdLoading] = useState(false);
 
@@ -93,6 +97,11 @@ export default function SignInForm() {
             </p>
           </div>
 
+          {success && (
+            <div className="mb-4 rounded-lg bg-success-50 border border-success-200 px-4 py-3 text-sm text-success-700 dark:bg-success-500/10 dark:border-success-500/20 dark:text-success-400">
+              {success}
+            </div>
+          )}
           {error && (
             <div className="mb-4 rounded-lg bg-error-50 border border-error-200 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
               {error}
