@@ -234,7 +234,7 @@ public class AdAuthServiceImpl implements AdAuthService {
         user.setRole(Role.USER);
         // Random unguessable password — local login is blocked for AZURE_AD users
         user.setPassword("$AD$" + UUID.randomUUID());
-        user.setPasswordChangedAt(null); // no password age enforcement for AD users
+        user.setPasswordChangedAt(LocalDateTime.now()); // no password age enforcement for AD users; column is NOT NULL
         return userRepository.save(user);
     }
 
