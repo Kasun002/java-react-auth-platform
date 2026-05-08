@@ -25,6 +25,8 @@ import Blank from "./pages/Blank";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
+import UsersPage from "./pages/Users/UsersPage";
+import UserDetailPage from "./pages/Users/UserDetailPage";
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -44,7 +46,8 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Home />} />
-              <Route path="/users" element={<Blank />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/users/:id" element={<UserDetailPage />} />
               <Route path="/groups" element={<Blank />} />
               <Route path="/roles" element={<Blank />} />
               <Route path="/permissions" element={<Blank />} />

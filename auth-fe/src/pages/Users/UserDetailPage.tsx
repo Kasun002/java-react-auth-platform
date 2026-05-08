@@ -1,0 +1,778 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import PageMeta from "../../components/common/PageMeta";
+import Badge from "../../components/ui/badge/Badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "../../components/ui/table";
+import {
+  ChevronLeftIcon,
+  GroupIcon,
+  LockIcon,
+  BoltIcon,
+  DocsIcon,
+  CheckCircleIcon,
+  AlertIcon,
+  ErrorIcon,
+} from "../../icons";
+import {
+  getUserGroups,
+  getUserEffectivePermissions,
+  addUserToGroup,
+  removeUserFromGroup,
+  listGroups,
+} from "../../services/adminService";
+import type { UserGroupDto } from "../../types/admin";
+import { USERS, AUDIT } from "../../temp_data/rbacData";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+type StatusColor = "success" | "error" | "warning" | "light";
+
+const STATUS_COLOR: Record<string, StatusColor> = {
+  ACTIVE: "success",
+  INACTIVE: "light",
+  SUSPENDED: "error",
+};
+
+const AUTH_PROVIDER_COLOR: Record<string, StatusColor> = {
+  AZURE_AD: "primary" as StatusColor,
+  LOCAL: "light",
+  LDAP: "warning",
+};
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function ProfileRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] items-start border-b border-gray-100 dark:border-gray-800 last:border-0 px-5 py-3">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 pt-0.5">
+        {label}
+      </dt>
+      <dd className="text-sm text-gray-700 dark:text-gray-300 break-all">{value}</dd>
+    </div>
+  );
+}
+
+type TabId = "overview" | "groups" | "roles" | "permissions" | "activity";
+
+interface TabConfig {
+  id: TabId;
+  label: string;
+  icon: React.ReactNode;
+  count?: number;
+}
+
+// ── Assign Group Modal ────────────────────────────────────────────────────────
+
+interface AssignGroupModalProps {
+  userId: number;
+  currentGroupIds: number[];
+  onClose: () => void;
+  onAssigned: () => void;
+}
+
+function AssignGroupModal({
+  userId,
+  currentGroupIds,
+  onClose,
+  onAssigned,
+}: AssignGroupModalProps) {
+  const [availableGroups, setAvailableGroups] = useState<UserGroupDto[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listGroups()
+      .then((res) => {
+        const all = res.data.data ?? [];
+        setAvailableGroups(all.filter((g) => !currentGroupIds.includes(g.id)));
+      })
+      .catch(() => setError("Failed to load groups."));
+  }, [currentGroupIds]);
+
+  async function handleAssign() {
+    if (!selected) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await addUserToGroup(userId, selected);
+      onAssigned();
+      onClose();
+    } catch {
+      setError("Failed to assign group. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            Assign to group
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-4">
+          <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+            Adding the user to a group grants them all permissions from the
+            group&apos;s roles. Effective permissions update on next login.
+          </p>
+
+          {error && (
+            <div className="mb-3 rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+              {error}
+            </div>
+          )}
+
+          <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
+            {availableGroups.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-gray-400">
+                No available groups
+              </p>
+            ) : (
+              availableGroups.map((g) => (
+                <label
+                  key={g.id}
+                  className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${
+                    selected === g.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="group-select"
+                    checked={selected === g.id}
+                    onChange={() => setSelected(g.id)}
+                    className="accent-brand-500"
+                  />
+                  <Badge color="light" size="sm">
+                    {g.type}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+                      {g.name}
+                    </p>
+                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                      {g.description}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-gray-400">
+                    {g.roles.length} role{g.roles.length !== 1 ? "s" : ""}
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-6 py-4">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAssign}
+            disabled={!selected || saving}
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? "Assigning…" : "Assign group"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export default function UserDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const user = USERS.find((u) => String(u.id) === id);
+
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [groups, setGroups] = useState<UserGroupDto[]>([]);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [permsLoading, setPermsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [permsError, setPermsError] = useState<string | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
+
+  const userId = Number(id);
+
+  // Load groups on mount
+  useEffect(() => {
+    if (!userId) return;
+    setGroupsLoading(true);
+    setGroupsError(null);
+    getUserGroups(userId)
+      .then((res) => setGroups(res.data.data ?? []))
+      .catch(() => setGroupsError("Failed to load group memberships."))
+      .finally(() => setGroupsLoading(false));
+  }, [userId]);
+
+  // Load effective permissions when tab opened
+  useEffect(() => {
+    if (activeTab !== "permissions" || !userId) return;
+    setPermsLoading(true);
+    setPermsError(null);
+    getUserEffectivePermissions(userId)
+      .then((res) => setPermissions(res.data.data ?? []))
+      .catch(() => setPermsError("Failed to load permissions."))
+      .finally(() => setPermsLoading(false));
+  }, [activeTab, userId]);
+
+  async function handleRemoveGroup(groupId: number) {
+    try {
+      await removeUserFromGroup(userId, groupId);
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    } catch {
+      // silently fail — could show a toast here
+    }
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+        <GroupIcon className="size-12 mb-3 text-gray-300 dark:text-gray-700" />
+        <p className="text-base font-medium">User not found</p>
+        <button
+          onClick={() => navigate("/users")}
+          className="mt-4 text-sm text-brand-500 hover:text-brand-600"
+        >
+          Back to Users
+        </button>
+      </div>
+    );
+  }
+
+  // Flatten all roles from all groups
+  const allRoles = groups.flatMap((g) =>
+    g.roles.map((r) => ({ ...r, sourceGroup: g.name }))
+  );
+  // Deduplicate by role id
+  const uniqueRoles = allRoles.filter(
+    (r, idx, arr) => arr.findIndex((x) => x.id === r.id) === idx
+  );
+
+  // Activity from temp data
+  const userAudit = AUDIT.filter((a) => a.userId === user.id);
+
+  const tabs: TabConfig[] = [
+    { id: "overview", label: "Overview", icon: <GroupIcon className="size-4" /> },
+    { id: "groups", label: "Groups", icon: <GroupIcon className="size-4" />, count: groups.length },
+    { id: "roles", label: "Roles", icon: <LockIcon className="size-4" />, count: uniqueRoles.length },
+    { id: "permissions", label: "Permissions", icon: <BoltIcon className="size-4" />, count: permissions.length || undefined },
+    { id: "activity", label: "Activity", icon: <DocsIcon className="size-4" />, count: userAudit.length || undefined },
+  ];
+
+  const currentGroupIds = groups.map((g) => g.id);
+
+  return (
+    <>
+      <PageMeta
+        title={`${user.name} | Users | Auth Platform`}
+        description={`User profile and access control for ${user.name}`}
+      />
+
+      {/* ── Back nav ── */}
+      <button
+        onClick={() => navigate("/users")}
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+      >
+        <ChevronLeftIcon className="size-4" />
+        Users
+      </button>
+
+      {/* ── Profile header ── */}
+      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] mb-1">
+        <div className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-start">
+          {/* Avatar */}
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400 text-xl font-bold">
+            {getInitials(user.name)}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">
+                {user.name}
+              </h1>
+              <Badge color={STATUS_COLOR[user.status] ?? "light"} size="sm">
+                {user.status}
+              </Badge>
+              <Badge
+                color={(AUTH_PROVIDER_COLOR[user.authProvider] as StatusColor) ?? "light"}
+                size="sm"
+              >
+                {user.authProvider === "AZURE_AD" ? "Azure AD" : user.authProvider}
+              </Badge>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
+              <span className="font-mono text-xs">#{user.id}</span>
+              <span>{user.email}</span>
+              <span>{user.department}</span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors">
+              Edit
+            </button>
+            {user.status === "ACTIVE" ? (
+              <button className="rounded-lg border border-error-200 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors">
+                Suspend
+              </button>
+            ) : (
+              <button className="rounded-lg border border-success-200 px-3 py-2 text-sm font-medium text-success-600 hover:bg-success-50 dark:border-success-500/30 dark:text-success-400 dark:hover:bg-success-500/10 transition-colors">
+                Activate
+              </button>
+            )}
+            <button
+              onClick={() => setAssignOpen(true)}
+              className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+            >
+              + Assign group
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex overflow-x-auto border-t border-gray-100 dark:border-gray-800 px-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 border-b-2 px-3 py-3.5 text-sm font-medium whitespace-nowrap transition-colors ${
+                activeTab === tab.id
+                  ? "border-brand-500 text-brand-600 dark:text-brand-400"
+                  : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              }`}
+            >
+              {tab.label}
+              {tab.count !== undefined && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-xs tabular-nums ${
+                    activeTab === tab.id
+                      ? "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
+                      : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tab content ── */}
+      <div className="mt-4 space-y-4">
+
+        {/* Overview */}
+        {activeTab === "overview" && (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {/* Profile card */}
+            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+              <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                  Profile
+                </h3>
+              </div>
+              <dl className="py-2">
+                <ProfileRow label="User ID" value={<span className="font-mono">#{user.id}</span>} />
+                <ProfileRow label="Email" value={user.email} />
+                <ProfileRow label="Department" value={user.department} />
+                <ProfileRow label="Status" value={<Badge color={STATUS_COLOR[user.status] ?? "light"} size="sm">{user.status}</Badge>} />
+                <ProfileRow label="Auth Provider" value={<Badge color={(AUTH_PROVIDER_COLOR[user.authProvider] as StatusColor) ?? "light"} size="sm">{user.authProvider === "AZURE_AD" ? "Azure AD" : user.authProvider}</Badge>} />
+                <ProfileRow label="Member Since" value={formatDate(user.createdAt)} />
+                <ProfileRow label="Last Login" value={<span className="font-mono text-xs">{formatDate(user.lastLoginAt)}</span>} />
+                <ProfileRow label="Groups" value={<span className="font-medium">{groups.length}</span>} />
+                <ProfileRow label="Roles" value={<span className="font-medium">{uniqueRoles.length}</span>} />
+              </dl>
+            </div>
+
+            {/* Group memberships */}
+            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] lg:col-span-2">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-5 py-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Group memberships
+                  </h3>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {groups.length} group{groups.length !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAssignOpen(true)}
+                  className="text-xs text-brand-500 hover:text-brand-600 font-medium"
+                >
+                  + Add
+                </button>
+              </div>
+
+              {groupsLoading ? (
+                <div className="flex items-center justify-center py-10 text-sm text-gray-400">
+                  Loading…
+                </div>
+              ) : groupsError ? (
+                <div className="px-5 py-4 text-sm text-error-600 dark:text-error-400">{groupsError}</div>
+              ) : groups.length === 0 ? (
+                <div className="flex flex-col items-center py-10 text-gray-400">
+                  <GroupIcon className="size-8 mb-2 text-gray-300 dark:text-gray-700" />
+                  <p className="text-sm">No group memberships</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {groups.map((g) => (
+                    <div
+                      key={g.id}
+                      className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+                    >
+                      <Badge color="light" size="sm">{g.type}</Badge>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+                          {g.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {g.description}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-400 shrink-0">
+                        {g.roles.length} role{g.roles.length !== 1 ? "s" : ""}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveGroup(g.id)}
+                        className="ml-1 text-xs text-gray-400 hover:text-error-500 dark:hover:text-error-400 transition-colors"
+                        title="Remove from group"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Roles summary */}
+            {uniqueRoles.length > 0 && (
+              <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] lg:col-span-3">
+                <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                    Effective roles
+                  </h3>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Inherited via group memberships
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 p-5">
+                  {uniqueRoles.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2"
+                    >
+                      <LockIcon className="size-3.5 text-warning-500 shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-gray-800 dark:text-white/90">
+                          {r.name}
+                        </p>
+                        <p className="text-xs text-gray-400">via {r.sourceGroup}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Groups tab */}
+        {activeTab === "groups" && (
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                Group memberships
+              </h3>
+              <button
+                onClick={() => setAssignOpen(true)}
+                className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 transition-colors"
+              >
+                + Assign
+              </button>
+            </div>
+            {groupsLoading ? (
+              <div className="flex items-center justify-center py-12 text-sm text-gray-400">
+                Loading…
+              </div>
+            ) : groups.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-gray-400">
+                <GroupIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
+                <p className="text-sm">No group memberships</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
+                    {["Group", "Type", "Description", "Roles", ""].map((h) => (
+                      <TableCell
+                        key={h}
+                        isHeader
+                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                      >
+                        {h}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {groups.map((g) => (
+                    <TableRow key={g.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <TableCell className="px-6 py-3 text-sm font-medium text-gray-800 dark:text-white/90">
+                        {g.name}
+                      </TableCell>
+                      <TableCell className="px-6 py-3">
+                        <Badge color="light" size="sm">{g.type}</Badge>
+                      </TableCell>
+                      <TableCell className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">
+                        {g.description}
+                      </TableCell>
+                      <TableCell className="px-6 py-3 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
+                        {g.roles.length}
+                      </TableCell>
+                      <TableCell className="px-6 py-3">
+                        <button
+                          onClick={() => handleRemoveGroup(g.id)}
+                          className="rounded-lg border border-error-200 px-3 py-1 text-xs font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        )}
+
+        {/* Roles tab */}
+        {activeTab === "roles" && (
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
+            <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                Effective roles
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                Inherited via group memberships — permissions update on next login
+              </p>
+            </div>
+            {uniqueRoles.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-gray-400">
+                <LockIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
+                <p className="text-sm">No roles assigned</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
+                    {["Role", "Description", "Source", "Permissions"].map((h) => (
+                      <TableCell
+                        key={h}
+                        isHeader
+                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                      >
+                        {h}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {uniqueRoles.map((r) => (
+                    <TableRow key={r.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <TableCell className="px-6 py-3">
+                        <div className="flex items-center gap-2">
+                          <LockIcon className="size-3.5 text-warning-500 shrink-0" />
+                          <span className="text-sm font-medium text-gray-800 dark:text-white/90 font-mono">
+                            {r.name}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">
+                        {r.description}
+                      </TableCell>
+                      <TableCell className="px-6 py-3">
+                        <Badge color="primary" size="sm">via {r.sourceGroup}</Badge>
+                      </TableCell>
+                      <TableCell className="px-6 py-3 text-sm tabular-nums text-gray-600 dark:text-gray-400">
+                        {r.permissions.length}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        )}
+
+        {/* Permissions tab */}
+        {activeTab === "permissions" && (
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
+            <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                Effective permissions
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                {permissions.length} permission{permissions.length !== 1 ? "s" : ""} — union of all group roles
+              </p>
+            </div>
+            {permsLoading ? (
+              <div className="flex items-center justify-center py-12 text-sm text-gray-400">
+                Loading…
+              </div>
+            ) : permsError ? (
+              <div className="px-6 py-4 text-sm text-error-600 dark:text-error-400">{permsError}</div>
+            ) : permissions.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-gray-400">
+                <BoltIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
+                <p className="text-sm">No permissions found</p>
+              </div>
+            ) : (
+              <div className="p-5">
+                <div className="flex flex-wrap gap-2">
+                  {permissions.map((code) => (
+                    <span
+                      key={code}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-mono text-gray-700 dark:text-gray-300"
+                    >
+                      <BoltIcon className="size-3 text-brand-500 shrink-0" />
+                      {code}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Activity tab */}
+        {activeTab === "activity" && (
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
+            <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                Audit activity
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                Actions performed by or on this user
+              </p>
+            </div>
+            {userAudit.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-gray-400">
+                <DocsIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
+                <p className="text-sm">No activity recorded</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
+                    {["Timestamp", "Action", "Details", "IP", "Status"].map((h) => (
+                      <TableCell
+                        key={h}
+                        isHeader
+                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                      >
+                        {h}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {userAudit.map((entry) => (
+                    <TableRow key={entry.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {formatDate(entry.timestamp)}
+                      </TableCell>
+                      <TableCell className="px-6 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {entry.status === "SUCCESS" && <CheckCircleIcon className="size-3.5 text-success-500 shrink-0" />}
+                          {entry.status === "WARNING" && <AlertIcon className="size-3.5 text-warning-500 shrink-0" />}
+                          {entry.status === "FAILURE" && <ErrorIcon className="size-3.5 text-error-500 shrink-0" />}
+                          <span className="text-xs font-mono text-gray-700 dark:text-gray-300">
+                            {entry.action.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                        {entry.details}
+                      </TableCell>
+                      <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400">
+                        {entry.ipAddress}
+                      </TableCell>
+                      <TableCell className="px-6 py-3">
+                        {entry.status === "SUCCESS" && <Badge color="success" size="sm">Success</Badge>}
+                        {entry.status === "WARNING" && <Badge color="warning" size="sm">Warning</Badge>}
+                        {entry.status === "FAILURE" && <Badge color="error" size="sm">Failure</Badge>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Assign group modal */}
+      {assignOpen && (
+        <AssignGroupModal
+          userId={userId}
+          currentGroupIds={currentGroupIds}
+          onClose={() => setAssignOpen(false)}
+          onAssigned={() =>
+            getUserGroups(userId).then((res) => setGroups(res.data.data ?? []))
+          }
+        />
+      )}
+    </>
+  );
+}
