@@ -27,6 +27,8 @@ import { ScrollToTop } from "./components/common/ScrollToTop";
 import Home from "./pages/Dashboard/Home";
 import UsersPage from "./pages/Users/UsersPage";
 import UserDetailPage from "./pages/Users/UserDetailPage";
+import GroupsPage from "./pages/Groups/GroupsPage";
+import GroupDetailPage from "./pages/Groups/GroupDetailPage";
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -48,7 +50,8 @@ export default function App() {
               <Route path="/dashboard" element={<Home />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/users/:id" element={<UserDetailPage />} />
-              <Route path="/groups" element={<Blank />} />
+              <Route path="/groups" element={<GroupsPage />} />
+              <Route path="/groups/:id" element={<GroupDetailPage />} />
               <Route path="/roles" element={<Blank />} />
               <Route path="/permissions" element={<Blank />} />
               <Route path="/audit" element={<Blank />} />
