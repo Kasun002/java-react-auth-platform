@@ -44,6 +44,12 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Home />} />
+              <Route path="/users" element={<Blank />} />
+              <Route path="/groups" element={<Blank />} />
+              <Route path="/roles" element={<Blank />} />
+              <Route path="/permissions" element={<Blank />} />
+              <Route path="/audit" element={<Blank />} />
+              <Route path="/settings" element={<Blank />} />
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/blank" element={<Blank />} />
