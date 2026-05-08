@@ -58,7 +58,27 @@ docker compose up -d
 
 ---
 
-## 2. Keycloak Setup (one-time)
+## 2. LocalStack Setup (one-time per container start)
+
+LocalStack emulates AWS SQS and SES locally. After `docker compose up -d`, the SQS queue is auto-created, but the SES sender identity must be verified manually — LocalStack resets it on every container restart.
+
+```bash
+aws --endpoint-url=http://localhost:4566 ses verify-email-identity \
+  --email-address noreply@shop.com --region us-east-1
+```
+
+Confirm it worked:
+
+```bash
+aws --endpoint-url=http://localhost:4566 ses list-identities --region us-east-1
+# Expected: { "Identities": ["noreply@shop.com"] }
+```
+
+> **Note:** OTP emails will fail with `MessageRejectedException: Email address not verified` if you skip this step or restart the LocalStack container without re-running the command.
+
+---
+
+## 3. Keycloak Setup (one-time)
 
 > Data persists across restarts thanks to `dev-file` storage.
 
@@ -88,7 +108,7 @@ Then **Credentials** tab → **Set password** → enter password → **Temporary
 
 ---
 
-## 3. Start the Auth Service
+## 4. Start the Auth Service
 
 ```bash
 cd auth
@@ -102,7 +122,7 @@ Swagger UI: http://localhost:8080/swagger-ui.html
 
 ---
 
-## 4. Start the Frontend
+## 5. Start the Frontend
 
 ```bash
 cd auth-fe
@@ -114,7 +134,7 @@ App URL: http://localhost:5173
 
 ---
 
-## 5. Verify the Full Flow
+## 6. Verify the Full Flow
 
 **Local login** — register a user first via Swagger or:
 ```bash
@@ -138,7 +158,7 @@ Expected: `"status": "SUCCESS"` with `accessToken` and `refreshToken`.
 
 ---
 
-## 6. Environment Variables
+## 7. Environment Variables
 
 All services use sensible local defaults — no `.env` files needed for local dev.
 
@@ -162,7 +182,7 @@ VITE_KEYCLOAK_CLIENT_ID=fp-auth-client
 
 ---
 
-## 7. Useful Commands
+## 8. Useful Commands
 
 ```bash
 # Stop all services
@@ -182,11 +202,15 @@ docker compose logs -f auth-db
 
 # Run backend tests (no Docker needed — uses H2 + mocked services)
 cd auth && mvn test
+
+# Re-verify SES sender after LocalStack restart (required every time LocalStack container restarts)
+aws --endpoint-url=http://localhost:4566 ses verify-email-identity \
+  --email-address noreply@shop.com --region us-east-1
 ```
 
 ---
 
-## 8. Production Checklist
+## 9. Production Checklist
 
 - [ ] Set `JWT_SECRET` to a cryptographically random ≥ 32-byte value (Vault / KMS)
 - [ ] Set `AD_LDAP_PASSWORD` from secrets manager

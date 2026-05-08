@@ -33,8 +33,8 @@ export default function SignInForm() {
     AD_ERROR_MESSAGES[searchParams.get("error") ?? ""] ?? null,
   );
   const success =
-    searchParams.get("registered") === "true"
-      ? "Account created! Check your email for a verification OTP, then sign in."
+    searchParams.get("verified") === "true"
+      ? "Email verified! Your account is active. Please sign in."
       : searchParams.get("reset") === "true"
       ? "Password reset successfully. Please sign in with your new password."
       : null;

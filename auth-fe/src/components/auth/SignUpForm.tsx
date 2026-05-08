@@ -130,7 +130,7 @@ export default function SignUpForm() {
           country:      form.country.trim(),
         }],
       });
-      navigate("/signin?registered=true");
+      navigate(`/verify-otp?email=${encodeURIComponent(form.email.trim())}`);
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { message?: string } } })

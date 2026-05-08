@@ -18,3 +18,9 @@ export const forgotPassword = (email: string) =>
 
 export const resetPassword = (token: string, newPassword: string) =>
   api.post<ApiResponse<void>>("/auth/reset-password", { token, newPassword });
+
+export const verifyOtp = (email: string, otp: string) =>
+  api.post<ApiResponse<void>>("/auth/verify-otp", { email, otp });
+
+export const resendOtp = (email: string) =>
+  api.post<ApiResponse<void>>("/auth/resend-otp", { email });

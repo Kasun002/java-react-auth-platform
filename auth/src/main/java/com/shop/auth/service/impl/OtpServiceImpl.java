@@ -8,7 +8,6 @@ import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.shop.auth.entity.OtpVerification;
@@ -53,19 +52,23 @@ public class OtpServiceImpl implements OtpService {
     // ── Generate & Send ───────────────────────────────────────────────────────
 
     /**
-     * REQUIRES_NEW: runs in its own transaction so that a queue-publish failure rolls back
-     * only the OTP record, not the already-committed user registration.
-     * The user can retry via {@code /auth/resend-otp}.
+     * Joins the caller's transaction (REQUIRED) so the OTP record is inserted in the same
+     * transaction as the user row — avoiding the FK violation that REQUIRES_NEW caused
+     * (the inner transaction couldn't see the uncommitted user row in the outer transaction).
+     *
+     * SQS publish is wrapped in its own try-catch so a queue failure does not mark the
+     * transaction rollback-only. The OTP record is committed with the user; the account
+     * holder can retry delivery via {@code /auth/resend-otp}.
      */
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void generateAndSend(User user) {
         // Invalidate any existing unused OTPs before issuing a new one.
         // A previously captured (but undelivered or intercepted) OTP must not remain valid.
         otpVerificationRepository.invalidateAllUnusedForUser(user);
 
         String rawOtp = Otp.generateRawOtp();
-
+        System.out.println("OTP" + rawOtp);
         OtpVerification record = new OtpVerification();
         record.setUser(user);
         record.setOtpHash(HashUtil.sha256Hex(rawOtp));
@@ -73,18 +76,23 @@ public class OtpServiceImpl implements OtpService {
         otpVerificationRepository.save(record);
 
         // Publish to SQS — the consumer delivers via SES asynchronously.
-        // The raw OTP is ephemeral: it lives in SQS only until the consumer deletes the message.
-        OtpEmailMessage message = new OtpEmailMessage(
-                UUID.randomUUID().toString(),
-                user.getEmail(),
-                user.getName(),
-                rawOtp,
-                otpExpiryMinutes,
-                Instant.now());
-        otpEmailPublisher.publish(message);
-
-        log.info("OTP generated and queued for delivery: email=[{}]",
-                MaskingUtil.maskEmail(user.getEmail()));
+        // Swallow publish failures: the OTP record is already persisted, so the user can
+        // trigger a fresh delivery via /auth/resend-otp without re-registering.
+        try {
+            OtpEmailMessage message = new OtpEmailMessage(
+                    UUID.randomUUID().toString(),
+                    user.getEmail(),
+                    user.getName(),
+                    rawOtp,
+                    otpExpiryMinutes,
+                    Instant.now());
+            otpEmailPublisher.publish(message);
+            log.info("OTP generated and queued for delivery: email=[{}]",
+                    MaskingUtil.maskEmail(user.getEmail()));
+        } catch (Exception e) {
+            log.error("OTP email publish failed for email=[{}] — OTP record saved, user can resend via /auth/resend-otp",
+                    MaskingUtil.maskEmail(user.getEmail()), e);
+        }
     }
 
     // ── Verify ────────────────────────────────────────────────────────────────
