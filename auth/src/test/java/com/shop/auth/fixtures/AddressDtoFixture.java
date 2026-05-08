@@ -17,7 +17,7 @@ public final class AddressDtoFixture {
         dto.setAddressLine2("Apt 4B");
         dto.setStreet("Galle Road");
         dto.setPostalCode("10100");
-        dto.setState(LocalStates.WEST);
+        dto.setState(LocalStates.WEST.toString());
         dto.setCountry("Sri Lanka");
         return dto;
     }
