@@ -35,6 +35,8 @@ export default function SignInForm() {
   const success =
     searchParams.get("registered") === "true"
       ? "Account created! Check your email for a verification OTP, then sign in."
+      : searchParams.get("reset") === "true"
+      ? "Password reset successfully. Please sign in with your new password."
       : null;
   const [loading, setLoading] = useState(false);
   const [adLoading, setAdLoading] = useState(false);
@@ -190,7 +192,7 @@ export default function SignInForm() {
                     </span>
                   </div>
                   <Link
-                    to="/reset-password"
+                    to="/forgot-password"
                     className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400"
                   >
                     Forgot password?

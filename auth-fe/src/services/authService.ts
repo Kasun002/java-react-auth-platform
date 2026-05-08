@@ -12,3 +12,9 @@ export const localLogin = (email: string, password: string) =>
 
 export const logoutApi = (refreshToken?: string) =>
   api.post("/auth/logout", { refreshToken });
+
+export const forgotPassword = (email: string) =>
+  api.post<ApiResponse<void>>("/auth/forgot-password", { email });
+
+export const resetPassword = (token: string, newPassword: string) =>
+  api.post<ApiResponse<void>>("/auth/reset-password", { token, newPassword });
