@@ -68,7 +68,7 @@ public class OtpServiceImpl implements OtpService {
         otpVerificationRepository.invalidateAllUnusedForUser(user);
 
         String rawOtp = Otp.generateRawOtp();
-        System.out.println("OTP" + rawOtp);
+        // System.out.println("OTP" + rawOtp);
         OtpVerification record = new OtpVerification();
         record.setUser(user);
         record.setOtpHash(HashUtil.sha256Hex(rawOtp));
