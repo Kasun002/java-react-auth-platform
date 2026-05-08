@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import Select from "react-select";
+import { Country, State } from "country-state-city";
 import { EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
@@ -16,10 +18,13 @@ const PASSWORD_RULES = [
   { label: "One special character",  test: (p: string) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
 ];
 
-const LOCAL_STATES = [
-  "WEST", "NORTH", "EAST", "NORTH_EAST", "CENTRAL",
-  "NORTH_WEST", "SOUTH_EAST", "UVA", "SABARAGAMUWA",
-];
+// ── Country / state option types ───────────────────────────────────────────────
+interface SelectOption { value: string; label: string; }
+
+const countryOptions: SelectOption[] = Country.getAllCountries().map((c) => ({
+  value: c.isoCode,
+  label: c.name,
+}));
 
 // ── Form shape ────────────────────────────────────────────────────────────────
 interface FormValues {
@@ -32,8 +37,9 @@ interface FormValues {
   addressLine2: string;
   street: string;
   postalCode: string;
-  state: string;
-  country: string;
+  state: string;       // state name (string sent to backend)
+  countryCode: string; // ISO code used to load states (not sent)
+  country: string;     // country name sent to backend
 }
 
 type FormErrors = Partial<Record<keyof FormValues | "terms", string>>;
@@ -41,7 +47,7 @@ type FormErrors = Partial<Record<keyof FormValues | "terms", string>>;
 const INITIAL: FormValues = {
   name: "", email: "", phone: "", password: "", confirmPassword: "",
   addressLine1: "", addressLine2: "", street: "", postalCode: "",
-  state: "", country: "",
+  state: "", countryCode: "", country: "",
 };
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -78,6 +84,29 @@ export default function SignUpForm() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(prev => ({ ...prev, [key]: e.target.value }));
 
+  // Country select handler — reset state when country changes
+  function handleCountryChange(option: SelectOption | null) {
+    setForm(prev => ({
+      ...prev,
+      countryCode: option?.value ?? "",
+      country: option?.label ?? "",
+      state: "",
+    }));
+  }
+
+  // State select handler
+  function handleStateChange(option: SelectOption | null) {
+    setForm(prev => ({ ...prev, state: option?.label ?? "" }));
+  }
+
+  // Build state options for selected country
+  const stateOptions: SelectOption[] = form.countryCode
+    ? State.getStatesOfCountry(form.countryCode).map((s) => ({
+        value: s.isoCode,
+        label: s.name,
+      }))
+    : [];
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate(form, agreed);
@@ -112,17 +141,33 @@ export default function SignUpForm() {
     }
   }
 
-  const inputClass = "h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-brand-300 focus:ring-3 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800";
+  // react-select styles to match existing Input appearance
+  const selectStyles = {
+    control: (base: object, state: { isFocused: boolean }) => ({
+      ...base,
+      height: "44px",
+      borderRadius: "8px",
+      borderColor: state.isFocused ? "#a3b8ff" : "#d1d5db",
+      boxShadow: state.isFocused ? "0 0 0 3px rgba(99,102,241,0.12)" : "none",
+      backgroundColor: "transparent",
+      fontSize: "14px",
+      "&:hover": { borderColor: "#a3b8ff" },
+    }),
+    option: (base: object, state: { isSelected: boolean; isFocused: boolean }) => ({
+      ...base,
+      backgroundColor: state.isSelected ? "#6366f1" : state.isFocused ? "#eef2ff" : "white",
+      color: state.isSelected ? "white" : "#1f2937",
+      fontSize: "14px",
+    }),
+    singleValue: (base: object) => ({ ...base, color: "#1f2937" }),
+    placeholder: (base: object) => ({ ...base, color: "#9ca3af" }),
+    menu: (base: object) => ({ ...base, zIndex: 50 }),
+  };
 
   return (
     <div className="flex flex-col flex-1 w-full overflow-y-auto lg:w-1/2 no-scrollbar">
       <div className="w-full max-w-md mx-auto mb-5 sm:pt-10">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          ← Back
-        </Link>
+       
       </div>
 
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
@@ -246,22 +291,30 @@ export default function SignUpForm() {
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
-                <Label>Province / State</Label>
-                <select
-                  value={form.state}
-                  onChange={fieldChange("state")}
-                  className={inputClass}
-                >
-                  <option value="">Select province</option>
-                  {LOCAL_STATES.map(s => (
-                    <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                  ))}
-                </select>
+                <Label>Country <span className="text-error-500">*</span></Label>
+                <Select
+                  options={countryOptions}
+                  value={countryOptions.find(o => o.value === form.countryCode) ?? null}
+                  onChange={handleCountryChange}
+                  placeholder="Select country"
+                  isSearchable
+                  classNamePrefix="rselect"
+                  styles={selectStyles}
+                />
+                {errors.country && <p className="mt-1 text-xs text-error-500">{errors.country}</p>}
               </div>
               <div>
-                <Label>Country <span className="text-error-500">*</span></Label>
-                <Input placeholder="Sri Lanka" value={form.country} onChange={fieldChange("country")} />
-                {errors.country && <p className="mt-1 text-xs text-error-500">{errors.country}</p>}
+                <Label>Province / State</Label>
+                <Select
+                  options={stateOptions}
+                  value={stateOptions.find(o => o.label === form.state) ?? null}
+                  onChange={handleStateChange}
+                  placeholder={form.countryCode ? "Select state" : "Select country first"}
+                  isDisabled={!form.countryCode}
+                  isSearchable
+                  classNamePrefix="rselect"
+                  styles={selectStyles}
+                />
               </div>
             </div>
 

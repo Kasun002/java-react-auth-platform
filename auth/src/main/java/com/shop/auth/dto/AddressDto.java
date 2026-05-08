@@ -1,7 +1,5 @@
 package com.shop.auth.dto;
 
-import com.shop.auth.utils.LocalStates;
-
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -23,8 +21,8 @@ public class AddressDto {
     @Schema(description = "Postal / ZIP code", example = "10100")
     private String postalCode;
 
-    @Schema(description = "Province or state", example = "WEST")
-    private LocalStates state;
+    @Schema(description = "Province or state", example = "Western Province")
+    private String state;
 
     @Schema(description = "Country name", example = "Sri Lanka", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "Country is required")
