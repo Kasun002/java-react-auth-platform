@@ -1,6 +1,11 @@
 import api from "../lib/axios";
 import type { ApiResponse } from "../types/auth";
-import type { BankingRoleDto, PermissionDto, UserGroupDto } from "../types/admin";
+import type { BankingRoleDto, DashboardStatsDto, PermissionDto, UserGroupDto } from "../types/admin";
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+export const getDashboardStats = () =>
+  api.get<ApiResponse<DashboardStatsDto>>("/admin/dashboard/stats");
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 
