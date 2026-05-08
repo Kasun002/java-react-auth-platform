@@ -29,6 +29,11 @@ import UsersPage from "./pages/Users/UsersPage";
 import UserDetailPage from "./pages/Users/UserDetailPage";
 import GroupsPage from "./pages/Groups/GroupsPage";
 import GroupDetailPage from "./pages/Groups/GroupDetailPage";
+import RolesPage from "./pages/Roles/RolesPage";
+import RoleDetailPage from "./pages/Roles/RoleDetailPage";
+import PermissionsPage from "./pages/Permissions/PermissionsPage";
+import AuditPage from "./pages/Audit/AuditPage";
+import SettingsPage from "./pages/Settings/SettingsPage";
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -52,10 +57,11 @@ export default function App() {
               <Route path="/users/:id" element={<UserDetailPage />} />
               <Route path="/groups" element={<GroupsPage />} />
               <Route path="/groups/:id" element={<GroupDetailPage />} />
-              <Route path="/roles" element={<Blank />} />
-              <Route path="/permissions" element={<Blank />} />
-              <Route path="/audit" element={<Blank />} />
-              <Route path="/settings" element={<Blank />} />
+              <Route path="/roles" element={<RolesPage />} />
+              <Route path="/roles/:id" element={<RoleDetailPage />} />
+              <Route path="/permissions" element={<PermissionsPage />} />
+              <Route path="/audit" element={<AuditPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/profile" element={<UserProfiles />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/blank" element={<Blank />} />
