@@ -48,7 +48,9 @@ public class AdLdapGroupServiceImpl implements AdLdapGroupService {
         if (ldap.getUrl() != null && !ldap.getUrl().isBlank()) {
             LdapContextSource contextSource = new LdapContextSource();
             contextSource.setUrl(ldap.getUrl());
-            contextSource.setBase(ldap.getBase() != null ? ldap.getBase() : "");
+            // base is intentionally left empty — userSearchBase and groupSearchBase
+            // in properties are already full absolute DNs, so no prefix is needed.
+            contextSource.setBase("");
             contextSource.setUserDn(ldap.getUserDn());
             contextSource.setPassword(ldap.getPassword());
             contextSource.afterPropertiesSet();
