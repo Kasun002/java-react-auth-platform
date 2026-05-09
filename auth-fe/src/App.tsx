@@ -63,7 +63,7 @@ export default function App() {
               <Route path="/audit" element={<AuditPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/profile" element={<UserProfiles />} />
-              <Route path="/calendar" element={<Calendar />} />
+              {/* <Route path="/calendar" element={<Calendar />} />
               <Route path="/blank" element={<Blank />} />
               <Route path="/form-elements" element={<FormElements />} />
               <Route path="/basic-tables" element={<BasicTables />} />
@@ -74,7 +74,7 @@ export default function App() {
               <Route path="/images" element={<Images />} />
               <Route path="/videos" element={<Videos />} />
               <Route path="/line-chart" element={<LineChart />} />
-              <Route path="/bar-chart" element={<BarChart />} />
+              <Route path="/bar-chart" element={<BarChart />} /> */}
             </Route>
           </Route>
 
