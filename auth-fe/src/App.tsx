@@ -1,39 +1,28 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router";
-import { AuthProvider } from "./context/AuthContext";
-import { useAuth } from "./context/AuthContext";
+import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router";
+import AdminRoute from "./components/common/AdminRoute";
 import ProtectedRoute from "./components/common/ProtectedRoute";
-import SignIn from "./pages/AuthPages/SignIn";
-import SignUp from "./pages/AuthPages/SignUp";
+import { ScrollToTop } from "./components/common/ScrollToTop";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import AppLayout from "./layout/AppLayout";
+import AuditPage from "./pages/Audit/AuditPage";
 import AdCallback from "./pages/AuthPages/AdCallback";
 import ForgotPassword from "./pages/AuthPages/ForgotPassword";
-import ResetPassword from "./pages/AuthPages/ResetPassword";
 import OtpVerify from "./pages/AuthPages/OtpVerify";
-import NotFound from "./pages/OtherPage/NotFound";
-import UserProfiles from "./pages/UserProfiles";
-import Videos from "./pages/UiElements/Videos";
-import Images from "./pages/UiElements/Images";
-import Alerts from "./pages/UiElements/Alerts";
-import Badges from "./pages/UiElements/Badges";
-import Avatars from "./pages/UiElements/Avatars";
-import Buttons from "./pages/UiElements/Buttons";
-import LineChart from "./pages/Charts/LineChart";
-import BarChart from "./pages/Charts/BarChart";
-import Calendar from "./pages/Calendar";
-import BasicTables from "./pages/Tables/BasicTables";
-import FormElements from "./pages/Forms/FormElements";
-import Blank from "./pages/Blank";
-import AppLayout from "./layout/AppLayout";
-import { ScrollToTop } from "./components/common/ScrollToTop";
+import ResetPassword from "./pages/AuthPages/ResetPassword";
+import SignIn from "./pages/AuthPages/SignIn";
+import SignUp from "./pages/AuthPages/SignUp";
 import Home from "./pages/Dashboard/Home";
-import UsersPage from "./pages/Users/UsersPage";
-import UserDetailPage from "./pages/Users/UserDetailPage";
-import GroupsPage from "./pages/Groups/GroupsPage";
 import GroupDetailPage from "./pages/Groups/GroupDetailPage";
-import RolesPage from "./pages/Roles/RolesPage";
-import RoleDetailPage from "./pages/Roles/RoleDetailPage";
+import GroupsPage from "./pages/Groups/GroupsPage";
+import NotFound from "./pages/OtherPage/NotFound";
+import Unauthorized from "./pages/OtherPage/Unauthorized";
 import PermissionsPage from "./pages/Permissions/PermissionsPage";
-import AuditPage from "./pages/Audit/AuditPage";
+import RoleDetailPage from "./pages/Roles/RoleDetailPage";
+import RolesPage from "./pages/Roles/RolesPage";
 import SettingsPage from "./pages/Settings/SettingsPage";
+import UserProfiles from "./pages/UserProfiles";
+import UserDetailPage from "./pages/Users/UserDetailPage";
+import UsersPage from "./pages/Users/UsersPage";
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -49,19 +38,23 @@ export default function App() {
           {/* Root — redirects to /signin or /dashboard based on auth state */}
           <Route path="/" element={<RootRedirect />} />
 
-          {/* Protected dashboard routes */}
+          {/* Protected routes — require authentication */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route path="/dashboard" element={<Home />} />
-              <Route path="/users" element={<UsersPage />} />
-              <Route path="/users/:id" element={<UserDetailPage />} />
-              <Route path="/groups" element={<GroupsPage />} />
-              <Route path="/groups/:id" element={<GroupDetailPage />} />
-              <Route path="/roles" element={<RolesPage />} />
-              <Route path="/roles/:id" element={<RoleDetailPage />} />
-              <Route path="/permissions" element={<PermissionsPage />} />
-              <Route path="/audit" element={<AuditPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              {/* Admin-only routes — require SYSTEM_ADMIN or SUPER_ADMIN group */}
+              <Route element={<AdminRoute />}>
+                <Route path="/dashboard" element={<Home />} />
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/users/:id" element={<UserDetailPage />} />
+                <Route path="/groups" element={<GroupsPage />} />
+                <Route path="/groups/:id" element={<GroupDetailPage />} />
+                <Route path="/roles" element={<RolesPage />} />
+                <Route path="/roles/:id" element={<RoleDetailPage />} />
+                <Route path="/permissions" element={<PermissionsPage />} />
+                <Route path="/audit" element={<AuditPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
+              {/* Accessible to any authenticated user */}
               <Route path="/profile" element={<UserProfiles />} />
               {/* <Route path="/calendar" element={<Calendar />} />
               <Route path="/blank" element={<Blank />} />
@@ -85,6 +78,9 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-otp" element={<OtpVerify />} />
           <Route path="/auth/callback" element={<AdCallback />} />
+
+          {/* 403 — authenticated but not in an admin group */}
+          <Route path="/unauthorized" element={<Unauthorized />} />
 
           {/* Fallback */}
           <Route path="*" element={<NotFound />} />

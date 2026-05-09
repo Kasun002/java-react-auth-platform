@@ -158,7 +158,232 @@ Expected: `"status": "SUCCESS"` with `accessToken` and `refreshToken`.
 
 ---
 
-## 7. Environment Variables
+## 7. Granting Admin Access
+
+The admin frontend (`/dashboard`, `/users`, `/groups`, `/roles`, `/permissions`, `/audit`, `/settings`) requires specific RBAC permissions. Permissions are delivered through groups — a user must be a member of `SYSTEM_ADMIN` or `SUPER_ADMIN` to use admin pages.
+
+### How it works
+
+```
+Keycloak / LDAP group          ad_group_mappings table       local UserGroup
+─────────────────────          ───────────────────────       ────────────────
+GRP-SYSTEM-ADMINS    ────────► SYSTEM_ADMIN           ────► ROLE_SYSTEM_ADMIN
+GRP-SYSTEM-ADMINS    ────────► SUPER_ADMIN             ────► ROLE_SUPER_ADMIN
+```
+
+On every AD login the auth service reads the user's LDAP groups, looks them up in `ad_group_mappings`, and places the user into the corresponding local groups. The resulting permissions are embedded in the JWT.
+
+### Permissions required per admin page
+
+| Page | Required permission |
+|---|---|
+| `/dashboard` | `DASHBOARD_VIEW` |
+| `/users` | `USER_GROUPS_MANAGE` |
+| `/groups` | `GROUP_MANAGE` |
+| `/roles` | `ROLE_MANAGE` |
+| `/permissions` | `PERMISSION_MANAGE` |
+| `/audit` | `AUDIT_LOG_VIEW` |
+| `/settings` | `SYSTEM_CONFIG_VIEW` |
+
+`ROLE_SYSTEM_ADMIN` carries all of the above. `ROLE_SUPER_ADMIN` carries every permission in the system.
+
+---
+
+### Option A — Keycloak / AD SSO user (recommended)
+
+This is the correct path for any user who logs in via `POST /auth/ad/login`.
+
+#### Step 1 — Add the user to `GRP-SYSTEM-ADMINS` in OpenLDAP
+
+`carol@corp.example.com` is already seeded into this group by `auth/docker/ldap/bootstrap.ldif` — skip to Step 2 for Carol.
+
+For any other user, add them via **phpLDAPadmin** (http://localhost:6443, login `cn=admin,dc=corp,dc=example,dc=com` / `admin`):
+
+1. Expand **`ou=users`** → **Create a child entry** → `Generic: User Account`
+2. Fill in `cn`, `sn`, `mail` (= login email), `userPassword`
+3. Navigate to **`ou=groups → cn=GRP-SYSTEM-ADMINS`** → **Add new attribute** → `member` → enter the user's DN (`cn=Full Name,ou=users,dc=corp,dc=example,dc=com`)
+
+Or via `ldapmodify` on the command line:
+
+```bash
+# Replace "New User" and email with the real values
+cat > /tmp/add-admin.ldif << 'EOF'
+dn: cn=New User,ou=users,dc=corp,dc=example,dc=com
+changetype: add
+objectClass: inetOrgPerson
+cn: New User
+sn: User
+mail: newuser@corp.example.com
+userPassword: NewUser@Pass1!
+
+dn: cn=GRP-SYSTEM-ADMINS,ou=groups,dc=corp,dc=example,dc=com
+changetype: modify
+add: member
+member: cn=New User,ou=users,dc=corp,dc=example,dc=com
+EOF
+
+ldapmodify -x -H ldap://localhost:389 \
+  -D "cn=admin,dc=corp,dc=example,dc=com" -w admin \
+  -f /tmp/add-admin.ldif
+```
+
+Also create the matching Keycloak account (same email, Step 4 of the Keycloak setup above).
+
+#### Step 2 — AD group mappings (already seeded by migration V19)
+
+Flyway migration `V19__seed_ad_group_mappings.sql` runs automatically on startup and creates these mappings:
+
+| LDAP group (`ad_group_id`) | Local group |
+|---|---|
+| `GRP-RETAIL-CUSTOMERS` | `RETAIL_CUSTOMER` |
+| `GRP-BANK-STAFF` | `BANK_TELLER` |
+| `GRP-SYSTEM-ADMINS` | `SYSTEM_ADMIN` |
+
+No manual SQL is needed. You can verify the mappings in pgAdmin or with:
+
+```bash
+PGPASSWORD=admin psql -h localhost -p 5433 -U admin -d auth_db -c \
+  "SELECT m.ad_group_id, g.name AS local_group FROM ad_group_mappings m JOIN user_groups g ON g.id = m.local_group_id;"
+```
+
+To map `GRP-SYSTEM-ADMINS` to `SUPER_ADMIN` instead (full access), update the row:
+
+```sql
+UPDATE ad_group_mappings
+SET    local_group_id = (SELECT id FROM user_groups WHERE name = 'SUPER_ADMIN')
+WHERE  ad_group_id = 'GRP-SYSTEM-ADMINS';
+```
+
+> `ad_group_id` must exactly match the LDAP `cn` of the group (case-sensitive).
+> The `unmapped-group-strategy` defaults to `DEFAULT`, which falls back to `RETAIL_CUSTOMER` for any LDAP group that has **no** mapping entry — so unmapped users cannot reach admin pages.
+
+#### Step 3 — Log in as the admin user
+
+```bash
+# Get a Keycloak ID token for Carol
+ID_TOKEN=$(curl -s -X POST http://localhost:8180/realms/corporate/protocol/openid-connect/token \
+  -d 'grant_type=password' \
+  -d 'client_id=fp-auth-client' \
+  -d 'scope=openid' \
+  -d 'username=carol@corp.example.com' \
+  -d 'password=Carol@Pass1!' | jq -r '.id_token')
+
+# Exchange it for a service JWT — this triggers LDAP group sync
+curl -s -X POST http://localhost:8080/auth/ad/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"idToken\":\"$ID_TOKEN\"}" | jq .
+```
+
+Expected response includes `"status": "SUCCESS"` with an `accessToken`. Decode the JWT payload to confirm the group and permissions:
+
+```bash
+ACCESS_TOKEN="<paste accessToken here>"
+echo "$ACCESS_TOKEN" | cut -d. -f2 \
+  | awk '{n=length($0)%4; if(n==2)pad="=="; else if(n==3)pad="="; else pad=""; print $0 pad}' \
+  | base64 -d 2>/dev/null | jq '{groups, permissions}'
+```
+
+Expected output:
+```json
+{
+  "groups": ["SYSTEM_ADMIN"],
+  "permissions": [
+    "DASHBOARD_VIEW", "GROUP_MANAGE", "ROLE_MANAGE", "PERMISSION_MANAGE",
+    "USER_GROUPS_MANAGE", "AUDIT_LOG_VIEW", "SYSTEM_CONFIG_VIEW",
+    "USER_VIEW", "USER_CREATE", "USER_UPDATE", "USER_DEACTIVATE", "SYSTEM_CONFIG_UPDATE"
+  ]
+}
+```
+
+#### LDAP bind account — local dev note
+
+`application.properties` defaults to binding with `cn=admin,dc=corp,dc=example,dc=com` (the OpenLDAP admin) because `osixia/openldap` does not grant regular LDAP entries read access to other subtrees by default. The `svc-ldap` service account defined in `bootstrap.ldif` is provided for **production** use where a sysadmin will configure the appropriate LDAP ACLs.
+
+In production, override via environment variables:
+```bash
+AD_LDAP_USER_DN=cn=svc-ldap,ou=service,dc=corp,dc=example,dc=com
+AD_LDAP_PASSWORD=<vault-secret>
+```
+
+---
+
+### Option B — Locally registered user (no SSO)
+
+For a user registered via `POST /auth/register` or created directly in the database.
+
+#### Via SQL (quickest for local dev)
+
+```sql
+-- Connect to auth_db and run:
+INSERT INTO user_group_memberships (user_id, group_id)
+SELECT u.id, g.id
+FROM   users u
+JOIN   user_groups g ON g.name = 'SYSTEM_ADMIN'   -- or 'SUPER_ADMIN'
+WHERE  u.email = 'youruser@example.com';
+```
+
+The user's next login will issue a JWT with full admin permissions.
+
+#### Via Admin API
+
+First obtain an existing admin `accessToken` (e.g. from Carol in Option A), then:
+
+```bash
+ADMIN_TOKEN="<paste accessToken here>"
+
+# 1. Find the user's numeric ID
+# Check pgAdmin or use: GET /admin/... (not yet exposed — use pgAdmin or SQL below)
+USER_ID=$(psql -h localhost -p 5433 -U admin -d auth_db -tAc \
+  "SELECT id FROM users WHERE email = 'youruser@example.com'")
+
+# 2. Find the SYSTEM_ADMIN group ID
+GROUP_ID=$(psql -h localhost -p 5433 -U admin -d auth_db -tAc \
+  "SELECT id FROM user_groups WHERE name = 'SYSTEM_ADMIN'")
+
+# 3. Assign
+curl -s -X POST "http://localhost:8080/admin/users/${USER_ID}/groups" \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d "{\"groupId\": ${GROUP_ID}}" | jq .
+```
+
+---
+
+### Verifying permissions
+
+After login, decode the `accessToken` at https://jwt.io or with:
+
+```bash
+# Paste your access token after "Bearer "
+TOKEN="<accessToken>"
+echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .permissions
+```
+
+You should see `["DASHBOARD_VIEW", "GROUP_MANAGE", "ROLE_MANAGE", ...]` (or more for `SUPER_ADMIN`).
+
+---
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `"groups": []` and `"permissions": []` in JWT | LDAP groups not resolving | Check service log for `LDAP group lookup failed` — usually an ACL or bind-DN issue |
+| `LDAP: error code 32 - No Such Object` | LDAP bind account lacks read access to `ou=users` / `ou=groups` | Default `application.properties` already uses OpenLDAP admin; ensure `AD_LDAP_USER_DN` / `AD_LDAP_PASSWORD` are not overriding to `svc-ldap` locally |
+| `LDAP: error code 49 - Invalid credentials` | Wrong bind password | Confirm `AD_LDAP_PASSWORD=admin` for local dev (OpenLDAP admin password from `docker-compose.yml`) |
+| Login succeeds but dashboard returns `403` | `ad_group_mappings` row missing | Verify V19 ran: `SELECT * FROM ad_group_mappings;` — restart service if table is empty |
+| `"No LDAP groups returned"` in log | User not a member of any mapped LDAP group | Confirm the user is in `GRP-SYSTEM-ADMINS` via `ldapsearch` (see Step 1) |
+
+### Quick reference — group → role → key permissions
+
+| Local group | Role | Key permissions |
+|---|---|---|
+| `RETAIL_CUSTOMER` | `ROLE_CUSTOMER_BASIC` | `ACCOUNT_VIEW`, `TRANSACTION_VIEW` |
+| `SYSTEM_ADMIN` | `ROLE_SYSTEM_ADMIN` | `DASHBOARD_VIEW`, `GROUP_MANAGE`, `ROLE_MANAGE`, `PERMISSION_MANAGE`, `USER_GROUPS_MANAGE`, `AUDIT_LOG_VIEW`, `SYSTEM_CONFIG_VIEW` |
+| `SUPER_ADMIN` | `ROLE_SUPER_ADMIN` | **all permissions** |
+
+---
+
+## 8. Environment Variables
 
 All services use sensible local defaults — no `.env` files needed for local dev.
 
@@ -182,7 +407,7 @@ VITE_KEYCLOAK_CLIENT_ID=fp-auth-client
 
 ---
 
-## 8. Useful Commands
+## 9. Useful Commands
 
 ```bash
 # Stop all services
@@ -210,7 +435,7 @@ aws --endpoint-url=http://localhost:4566 ses verify-email-identity \
 
 ---
 
-## 9. Production Checklist
+## 10. Production Checklist
 
 - [ ] Set `JWT_SECRET` to a cryptographically random ≥ 32-byte value (Vault / KMS)
 - [ ] Set `AD_LDAP_PASSWORD` from secrets manager
