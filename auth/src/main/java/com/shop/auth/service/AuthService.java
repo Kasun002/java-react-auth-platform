@@ -1,5 +1,8 @@
 package com.shop.auth.service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import com.shop.auth.dto.ChangePasswordRequestDto;
 import com.shop.auth.dto.ForgotPasswordRequestDto;
 import com.shop.auth.dto.LoginRequestDto;
@@ -9,6 +12,7 @@ import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.ResetPasswordRequestDto;
+import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 
 public interface AuthService {
@@ -76,4 +80,17 @@ public interface AuthService {
      * @param refreshToken the raw refresh token supplied by the client (may be null)
      */
     void logout(String accessToken, String refreshToken);
+
+    /**
+     * Returns a paginated list of all users with their RBAC context.
+     * Passwords and internal security fields are never included in the response.
+     */
+    Page<UserDto> getUsers(Pageable pageable);
+
+    /**
+     * Returns a single user by ID with their full RBAC context.
+     *
+     * @throws com.shop.auth.exception.ResourceNotFoundException if no user exists with the given ID
+     */
+    UserDto getUserById(Long userId);
 }

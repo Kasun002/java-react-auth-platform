@@ -2,6 +2,7 @@ export interface UserDto {
   id: number;
   name: string;
   email: string;
+  phone: string | null;
   role: string;
   status: string;
   authProvider: "LOCAL" | "AZURE_AD";
@@ -10,6 +11,7 @@ export interface UserDto {
   effectivePermissions: string[];
   lastLoginAt: string | null;
   createdAt: string;
+  updatedAt: string | null;
 }
 
 export interface AuthTokens {

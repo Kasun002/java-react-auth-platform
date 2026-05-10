@@ -15,6 +15,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,7 @@ import com.shop.auth.exception.InvalidCredentialsException;
 import com.shop.auth.exception.InvalidTokenException;
 import com.shop.auth.exception.PasswordExpiredException;
 import com.shop.auth.exception.PasswordResetTokenException;
+import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.exception.UserNotActiveException;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
@@ -502,6 +505,38 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             return "unknown";
         }
+    }
+
+    // ── Admin — user queries ──────────────────────────────────────────────────
+
+    /**
+     * Returns a paginated slice of all users.
+     *
+     * <p>Runs in a read-only transaction so Hibernate skips dirty-checking on
+     * the loaded entities, giving a small performance gain for large pages.
+     * Lazy collections (groups, directRoles, addresses) are accessed within the
+     * same session via {@link #buildUserDto}, which is safe inside the transaction.</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<UserDto> getUsers(Pageable pageable) {
+        log.info("Admin: listing users page=[{}] size=[{}]",
+                pageable.getPageNumber(), pageable.getPageSize());
+        return userRepository.findAll(pageable).map(this::buildUserDto);
+    }
+
+    /**
+     * Returns a single user by ID with the full RBAC context.
+     *
+     * @throws ResourceNotFoundException if no user exists with the given ID
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public UserDto getUserById(Long userId) {
+        log.info("Admin: fetching user id=[{}]", userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        return buildUserDto(user);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

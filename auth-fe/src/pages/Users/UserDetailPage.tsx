@@ -15,11 +15,9 @@ import {
   LockIcon,
   BoltIcon,
   DocsIcon,
-  CheckCircleIcon,
-  AlertIcon,
-  ErrorIcon,
 } from "../../icons";
 import {
+  getUserById,
   getUserGroups,
   getUserEffectivePermissions,
   addUserToGroup,
@@ -27,7 +25,7 @@ import {
   listGroups,
 } from "../../services/adminService";
 import type { UserGroupDto } from "../../types/admin";
-import { USERS, AUDIT } from "../../temp_data/rbacData";
+import type { UserDto } from "../../types/auth";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,12 +35,17 @@ const STATUS_COLOR: Record<string, StatusColor> = {
   ACTIVE: "success",
   INACTIVE: "light",
   SUSPENDED: "error",
+  NEW: "warning",
 };
 
 const AUTH_PROVIDER_COLOR: Record<string, StatusColor> = {
   AZURE_AD: "primary" as StatusColor,
   LOCAL: "light",
-  LDAP: "warning",
+};
+
+const AUTH_PROVIDER_LABEL: Record<string, string> = {
+  LOCAL: "Local",
+  AZURE_AD: "Azure AD",
 };
 
 function getInitials(name: string) {
@@ -74,6 +77,29 @@ function ProfileRow({ label, value }: { label: string; value: React.ReactNode })
         {label}
       </dt>
       <dd className="text-sm text-gray-700 dark:text-gray-300 break-all">{value}</dd>
+    </div>
+  );
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function UserSkeleton() {
+  return (
+    <div className="animate-pulse">
+      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] mb-1">
+        <div className="flex items-start gap-4 px-6 py-5">
+          <div className="h-14 w-14 shrink-0 rounded-2xl bg-gray-200 dark:bg-gray-700" />
+          <div className="flex-1 space-y-2 pt-1">
+            <div className="h-5 w-48 rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="h-3.5 w-72 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+        <div className="flex gap-6 border-t border-gray-100 dark:border-gray-800 px-6 py-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-4 w-20 rounded bg-gray-100 dark:bg-gray-800" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -134,7 +160,6 @@ function AssignGroupModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
           <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
             Assign to group
@@ -147,7 +172,6 @@ function AssignGroupModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-6 py-4">
           <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
             Adding the user to a group grants them all permissions from the
@@ -200,7 +224,6 @@ function AssignGroupModal({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-6 py-4">
           <button
             onClick={onClose}
@@ -227,20 +250,36 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const user = USERS.find((u) => String(u.id) === id);
+  const userId = Number(id);
 
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  // User profile (from API)
+  const [user, setUser] = useState<UserDto | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
+  const [userError, setUserError] = useState<string | null>(null);
+
+  // RBAC data (separate API calls)
   const [groups, setGroups] = useState<UserGroupDto[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [permsLoading, setPermsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [permsError, setPermsError] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [assignOpen, setAssignOpen] = useState(false);
 
-  const userId = Number(id);
+  // Load user profile
+  useEffect(() => {
+    if (!userId) return;
+    setUserLoading(true);
+    setUserError(null);
+    getUserById(userId)
+      .then((res) => setUser(res.data.data ?? null))
+      .catch(() => setUserError("Failed to load user."))
+      .finally(() => setUserLoading(false));
+  }, [userId]);
 
-  // Load groups on mount
+  // Load group memberships
   useEffect(() => {
     if (!userId) return;
     setGroupsLoading(true);
@@ -251,7 +290,7 @@ export default function UserDetailPage() {
       .finally(() => setGroupsLoading(false));
   }, [userId]);
 
-  // Load effective permissions when tab opened
+  // Load effective permissions when the permissions tab is opened
   useEffect(() => {
     if (activeTab !== "permissions" || !userId) return;
     setPermsLoading(true);
@@ -267,15 +306,40 @@ export default function UserDetailPage() {
       await removeUserFromGroup(userId, groupId);
       setGroups((prev) => prev.filter((g) => g.id !== groupId));
     } catch {
-      // silently fail — could show a toast here
+      // could show a toast here
     }
   }
 
-  if (!user) {
+  function refreshGroups() {
+    getUserGroups(userId).then((res) => setGroups(res.data.data ?? []));
+  }
+
+  // ── Loading state ────────────────────────────────────────────────────────
+
+  if (userLoading) {
+    return (
+      <>
+        <button
+          onClick={() => navigate("/users")}
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+        >
+          <ChevronLeftIcon className="size-4" />
+          Users
+        </button>
+        <UserSkeleton />
+      </>
+    );
+  }
+
+  // ── Error / not found ────────────────────────────────────────────────────
+
+  if (userError || !user) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-gray-400">
         <GroupIcon className="size-12 mb-3 text-gray-300 dark:text-gray-700" />
-        <p className="text-base font-medium">User not found</p>
+        <p className="text-base font-medium">
+          {userError ?? "User not found"}
+        </p>
         <button
           onClick={() => navigate("/users")}
           className="mt-4 text-sm text-brand-500 hover:text-brand-600"
@@ -286,27 +350,27 @@ export default function UserDetailPage() {
     );
   }
 
-  // Flatten all roles from all groups
+  // ── Derived data ─────────────────────────────────────────────────────────
+
+  // Flatten all roles from all groups and deduplicate
   const allRoles = groups.flatMap((g) =>
     g.roles.map((r) => ({ ...r, sourceGroup: g.name }))
   );
-  // Deduplicate by role id
   const uniqueRoles = allRoles.filter(
     (r, idx, arr) => arr.findIndex((x) => x.id === r.id) === idx
   );
 
-  // Activity from temp data
-  const userAudit = AUDIT.filter((a) => a.userId === user.id);
+  const currentGroupIds = groups.map((g) => g.id);
 
   const tabs: TabConfig[] = [
-    { id: "overview", label: "Overview", icon: <GroupIcon className="size-4" /> },
-    { id: "groups", label: "Groups", icon: <GroupIcon className="size-4" />, count: groups.length },
-    { id: "roles", label: "Roles", icon: <LockIcon className="size-4" />, count: uniqueRoles.length },
-    { id: "permissions", label: "Permissions", icon: <BoltIcon className="size-4" />, count: permissions.length || undefined },
-    { id: "activity", label: "Activity", icon: <DocsIcon className="size-4" />, count: userAudit.length || undefined },
+    { id: "overview",     label: "Overview",     icon: <GroupIcon className="size-4" /> },
+    { id: "groups",       label: "Groups",       icon: <GroupIcon className="size-4" />, count: groups.length },
+    { id: "roles",        label: "Roles",        icon: <LockIcon className="size-4" />, count: uniqueRoles.length },
+    { id: "permissions",  label: "Permissions",  icon: <BoltIcon className="size-4" />, count: permissions.length || undefined },
+    { id: "activity",     label: "Activity",     icon: <DocsIcon className="size-4" /> },
   ];
 
-  const currentGroupIds = groups.map((g) => g.id);
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -345,13 +409,13 @@ export default function UserDetailPage() {
                 color={(AUTH_PROVIDER_COLOR[user.authProvider] as StatusColor) ?? "light"}
                 size="sm"
               >
-                {user.authProvider === "AZURE_AD" ? "Azure AD" : user.authProvider}
+                {AUTH_PROVIDER_LABEL[user.authProvider] ?? user.authProvider}
               </Badge>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
               <span className="font-mono text-xs">#{user.id}</span>
               <span>{user.email}</span>
-              <span>{user.department}</span>
+              {user.phone && <span>{user.phone}</span>}
             </div>
           </div>
 
@@ -421,15 +485,15 @@ export default function UserDetailPage() {
                 </h3>
               </div>
               <dl className="py-2">
-                <ProfileRow label="User ID" value={<span className="font-mono">#{user.id}</span>} />
-                <ProfileRow label="Email" value={user.email} />
-                <ProfileRow label="Department" value={user.department} />
-                <ProfileRow label="Status" value={<Badge color={STATUS_COLOR[user.status] ?? "light"} size="sm">{user.status}</Badge>} />
-                <ProfileRow label="Auth Provider" value={<Badge color={(AUTH_PROVIDER_COLOR[user.authProvider] as StatusColor) ?? "light"} size="sm">{user.authProvider === "AZURE_AD" ? "Azure AD" : user.authProvider}</Badge>} />
+                <ProfileRow label="User ID"      value={<span className="font-mono">#{user.id}</span>} />
+                <ProfileRow label="Email"        value={user.email} />
+                {user.phone && <ProfileRow label="Phone" value={user.phone} />}
+                <ProfileRow label="Status"       value={<Badge color={STATUS_COLOR[user.status] ?? "light"} size="sm">{user.status}</Badge>} />
+                <ProfileRow label="Auth Provider" value={<Badge color={(AUTH_PROVIDER_COLOR[user.authProvider] as StatusColor) ?? "light"} size="sm">{AUTH_PROVIDER_LABEL[user.authProvider] ?? user.authProvider}</Badge>} />
                 <ProfileRow label="Member Since" value={formatDate(user.createdAt)} />
-                <ProfileRow label="Last Login" value={<span className="font-mono text-xs">{formatDate(user.lastLoginAt)}</span>} />
-                <ProfileRow label="Groups" value={<span className="font-medium">{groups.length}</span>} />
-                <ProfileRow label="Roles" value={<span className="font-medium">{uniqueRoles.length}</span>} />
+                <ProfileRow label="Last Login"   value={<span className="font-mono text-xs">{formatDate(user.lastLoginAt)}</span>} />
+                <ProfileRow label="Groups"       value={<span className="font-medium">{groups.length}</span>} />
+                <ProfileRow label="Roles"        value={<span className="font-medium">{uniqueRoles.length}</span>} />
               </dl>
             </div>
 
@@ -457,7 +521,9 @@ export default function UserDetailPage() {
                   Loading…
                 </div>
               ) : groupsError ? (
-                <div className="px-5 py-4 text-sm text-error-600 dark:text-error-400">{groupsError}</div>
+                <div className="px-5 py-4 text-sm text-error-600 dark:text-error-400">
+                  {groupsError}
+                </div>
               ) : groups.length === 0 ? (
                 <div className="flex flex-col items-center py-10 text-gray-400">
                   <GroupIcon className="size-8 mb-2 text-gray-300 dark:text-gray-700" />
@@ -495,7 +561,7 @@ export default function UserDetailPage() {
               )}
             </div>
 
-            {/* Roles summary */}
+            {/* Effective roles summary */}
             {uniqueRoles.length > 0 && (
               <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] lg:col-span-3">
                 <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
@@ -567,7 +633,10 @@ export default function UserDetailPage() {
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {groups.map((g) => (
-                    <TableRow key={g.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                    <TableRow
+                      key={g.id}
+                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+                    >
                       <TableCell className="px-6 py-3 text-sm font-medium text-gray-800 dark:text-white/90">
                         {g.name}
                       </TableCell>
@@ -629,7 +698,10 @@ export default function UserDetailPage() {
                 </TableHeader>
                 <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {uniqueRoles.map((r) => (
-                    <TableRow key={r.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                    <TableRow
+                      key={r.id}
+                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+                    >
                       <TableCell className="px-6 py-3">
                         <div className="flex items-center gap-2">
                           <LockIcon className="size-3.5 text-warning-500 shrink-0" />
@@ -671,7 +743,9 @@ export default function UserDetailPage() {
                 Loading…
               </div>
             ) : permsError ? (
-              <div className="px-6 py-4 text-sm text-error-600 dark:text-error-400">{permsError}</div>
+              <div className="px-6 py-4 text-sm text-error-600 dark:text-error-400">
+                {permsError}
+              </div>
             ) : permissions.length === 0 ? (
               <div className="flex flex-col items-center py-12 text-gray-400">
                 <BoltIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
@@ -706,58 +780,10 @@ export default function UserDetailPage() {
                 Actions performed by or on this user
               </p>
             </div>
-            {userAudit.length === 0 ? (
-              <div className="flex flex-col items-center py-12 text-gray-400">
-                <DocsIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
-                <p className="text-sm">No activity recorded</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
-                    {["Timestamp", "Action", "Details", "IP", "Status"].map((h) => (
-                      <TableCell
-                        key={h}
-                        isHeader
-                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                      >
-                        {h}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {userAudit.map((entry) => (
-                    <TableRow key={entry.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                      <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                        {formatDate(entry.timestamp)}
-                      </TableCell>
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {entry.status === "SUCCESS" && <CheckCircleIcon className="size-3.5 text-success-500 shrink-0" />}
-                          {entry.status === "WARNING" && <AlertIcon className="size-3.5 text-warning-500 shrink-0" />}
-                          {entry.status === "FAILURE" && <ErrorIcon className="size-3.5 text-error-500 shrink-0" />}
-                          <span className="text-xs font-mono text-gray-700 dark:text-gray-300">
-                            {entry.action.replace(/_/g, " ")}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
-                        {entry.details}
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400">
-                        {entry.ipAddress}
-                      </TableCell>
-                      <TableCell className="px-6 py-3">
-                        {entry.status === "SUCCESS" && <Badge color="success" size="sm">Success</Badge>}
-                        {entry.status === "WARNING" && <Badge color="warning" size="sm">Warning</Badge>}
-                        {entry.status === "FAILURE" && <Badge color="error" size="sm">Failure</Badge>}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <div className="flex flex-col items-center py-12 text-gray-400">
+              <DocsIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
+              <p className="text-sm">Audit log coming soon</p>
+            </div>
           </div>
         )}
       </div>
@@ -768,9 +794,7 @@ export default function UserDetailPage() {
           userId={userId}
           currentGroupIds={currentGroupIds}
           onClose={() => setAssignOpen(false)}
-          onAssigned={() =>
-            getUserGroups(userId).then((res) => setGroups(res.data.data ?? []))
-          }
+          onAssigned={refreshGroups}
         />
       )}
     </>

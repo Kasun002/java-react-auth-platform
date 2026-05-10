@@ -1,6 +1,6 @@
 import api from "../lib/axios";
-import type { ApiResponse } from "../types/auth";
-import type { BankingRoleDto, DashboardStatsDto, PermissionDto, UserGroupDto } from "../types/admin";
+import type { ApiResponse, UserDto } from "../types/auth";
+import type { BankingRoleDto, DashboardStatsDto, PageDto, PermissionDto, UserGroupDto } from "../types/admin";
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -55,3 +55,11 @@ export const removeUserFromGroup = (userId: number, groupId: number) =>
 
 export const getUserEffectivePermissions = (userId: number) =>
   api.get<ApiResponse<string[]>>(`/admin/users/${userId}/permissions`);
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+
+export const getUsers = (params: { page: number; size: number }) =>
+  api.get<ApiResponse<PageDto<UserDto>>>("/admin/users", { params });
+
+export const getUserById = (userId: number) =>
+  api.get<ApiResponse<UserDto>>(`/admin/users/${userId}`);

@@ -36,6 +36,17 @@ export interface DashboardStatsDto {
   }[];
 }
 
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+export interface PageDto<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  last: boolean;
+}
+
 // ── RBAC ──────────────────────────────────────────────────────────────────────
 
 export interface PermissionDto {

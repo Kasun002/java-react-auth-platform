@@ -9,12 +9,19 @@ import com.shop.auth.dto.AssignPermissionToRoleRequestDto;
 import com.shop.auth.dto.AssignRoleToGroupRequestDto;
 import com.shop.auth.dto.BankingRoleDto;
 import com.shop.auth.dto.PermissionDto;
+import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.UserGroupDto;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.exception.handler.GlobalExceptionHandler;
+import com.shop.auth.service.AuthService;
 import com.shop.auth.service.BankingRoleService;
 import com.shop.auth.service.PermissionService;
 import com.shop.auth.service.UserGroupService;
+import com.shop.auth.utils.UserStatus;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,6 +59,7 @@ class AdminControllerTest {
     @Mock private PermissionService  permissionService;
     @Mock private BankingRoleService bankingRoleService;
     @Mock private UserGroupService   userGroupService;
+    @Mock private AuthService        authService;
 
     private MockMvc      mockMvc;
     private ObjectMapper objectMapper;
@@ -60,7 +68,7 @@ class AdminControllerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AdminController(permissionService, bankingRoleService, userGroupService))
+                .standaloneSetup(new AdminController(permissionService, bankingRoleService, userGroupService, authService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -400,6 +408,101 @@ class AdminControllerTest {
 
             mockMvc.perform(delete("/admin/users/42/groups/1"))
                     .andExpect(status().isNoContent());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET /admin/users
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("GET /admin/users")
+    class GetUsers {
+
+        private UserDto makeUserDto(Long id, String name, String email) {
+            UserDto dto = new UserDto();
+            dto.setId(id);
+            dto.setName(name);
+            dto.setEmail(email);
+            dto.setStatus(UserStatus.ACTIVE);
+            dto.setGroups(List.of("RETAIL_CUSTOMER"));
+            dto.setRoles(List.of());
+            dto.setEffectivePermissions(List.of());
+            return dto;
+        }
+
+        @Test
+        @DisplayName("Returns 200 with paginated user list")
+        void shouldReturn200WithPage() throws Exception {
+            UserDto alice = makeUserDto(1L, "Alice", "alice@example.com");
+            Page<UserDto> page = new PageImpl<>(List.of(alice), PageRequest.of(0, 10), 1);
+            when(authService.getUsers(any())).thenReturn(page);
+
+            mockMvc.perform(get("/admin/users").param("page", "0").param("size", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].name").value("Alice"))
+                    .andExpect(jsonPath("$.data.totalElements", is(1)))
+                    .andExpect(jsonPath("$.data.totalPages", is(1)));
+        }
+
+        @Test
+        @DisplayName("Returns 200 with empty page when no users exist")
+        void shouldReturn200WithEmptyPage() throws Exception {
+            Page<UserDto> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
+            when(authService.getUsers(any())).thenReturn(emptyPage);
+
+            mockMvc.perform(get("/admin/users"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(0)))
+                    .andExpect(jsonPath("$.data.totalElements", is(0)));
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET /admin/users/{userId}
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("GET /admin/users/{userId}")
+    class GetUser {
+
+        private UserDto makeUserDto(Long id) {
+            UserDto dto = new UserDto();
+            dto.setId(id);
+            dto.setName("Bob");
+            dto.setEmail("bob@example.com");
+            dto.setStatus(UserStatus.ACTIVE);
+            dto.setGroups(List.of("SYSTEM_ADMIN"));
+            dto.setRoles(List.of());
+            dto.setEffectivePermissions(List.of());
+            return dto;
+        }
+
+        @Test
+        @DisplayName("Returns 200 with user detail")
+        void shouldReturn200WhenFound() throws Exception {
+            when(authService.getUserById(42L)).thenReturn(makeUserDto(42L));
+
+            mockMvc.perform(get("/admin/users/42"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("SUCCESS"))
+                    .andExpect(jsonPath("$.data.id", is(42)))
+                    .andExpect(jsonPath("$.data.name").value("Bob"))
+                    .andExpect(jsonPath("$.data.email").value("bob@example.com"));
+        }
+
+        @Test
+        @DisplayName("Returns 404 when user not found")
+        void shouldReturn404WhenNotFound() throws Exception {
+            when(authService.getUserById(99L))
+                    .thenThrow(new ResourceNotFoundException("User", 99L));
+
+            mockMvc.perform(get("/admin/users/99"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.status").value("FAIL"))
+                    .andExpect(jsonPath("$.message", containsString("99")));
         }
     }
 
