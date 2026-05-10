@@ -13,6 +13,7 @@ import { UserCircleIcon, GroupIcon } from "../../icons";
 import { getUsers, listGroups } from "../../services/adminService";
 import type { UserGroupDto } from "../../types/admin";
 import type { UserDto } from "../../types/auth";
+import Pagination from "../../utils/tblPagination";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -81,72 +82,6 @@ function SkeletonRow() {
   );
 }
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  totalElements: number;
-  onPageChange: (p: number) => void;
-}
-
-function Pagination({ page, totalPages, totalElements, onPageChange }: PaginationProps) {
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i);
-  const visible = pageNumbers.reduce<(number | "…")[]>((acc, i, idx, arr) => {
-    if (i === 0 || i === totalPages - 1 || Math.abs(i - page) <= 1) {
-      if (acc.length > 0 && typeof acc[acc.length - 1] === "number") {
-        const prev = acc[acc.length - 1] as number;
-        if (i > prev + 1) acc.push("…");
-      }
-      acc.push(i);
-    }
-    return acc;
-  }, []);
-
-  return (
-    <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 px-6 py-3">
-      <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-        Page {page + 1} of {totalPages} &middot; {totalElements} users total
-      </span>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => onPageChange(Math.max(0, page - 1))}
-          disabled={page === 0}
-          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5 transition-colors"
-        >
-          ← Prev
-        </button>
-        {visible.map((item, idx) =>
-          item === "…" ? (
-            <span key={`el-${idx}`} className="px-1.5 text-xs text-gray-400">
-              …
-            </span>
-          ) : (
-            <button
-              key={item}
-              onClick={() => onPageChange(item as number)}
-              className={`min-w-[28px] rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
-                page === item
-                  ? "border-brand-500 bg-brand-500 text-white"
-                  : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5"
-              }`}
-            >
-              {(item as number) + 1}
-            </button>
-          )
-        )}
-        <button
-          onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
-          disabled={page >= totalPages - 1}
-          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5 transition-colors"
-        >
-          Next →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 10;
@@ -174,7 +109,9 @@ export default function UsersPage() {
   useEffect(() => {
     listGroups()
       .then((res) => setGroupOptions(res.data.data ?? []))
-      .catch(() => {/* non-critical */});
+      .catch(() => {
+        /* non-critical */
+      });
   }, []);
 
   // Fetch page of users whenever page index changes
@@ -196,7 +133,9 @@ export default function UsersPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [page]);
 
   // Reset to page 0 when client-side filters change
@@ -208,7 +147,8 @@ export default function UsersPage() {
   const filtered = useMemo(() => {
     return users.filter((u) => {
       if (statusFilter !== "ALL" && u.status !== statusFilter) return false;
-      if (groupFilter !== "ALL" && !u.groups.includes(groupFilter)) return false;
+      if (groupFilter !== "ALL" && !u.groups.includes(groupFilter))
+        return false;
       if (query) {
         const q = query.toLowerCase();
         if (
@@ -421,7 +361,10 @@ export default function UsersPage() {
 
                     {/* Status */}
                     <TableCell className="px-4 py-3.5 hidden md:table-cell">
-                      <Badge color={STATUS_COLOR[user.status] ?? "light"} size="sm">
+                      <Badge
+                        color={STATUS_COLOR[user.status] ?? "light"}
+                        size="sm"
+                      >
                         {user.status}
                       </Badge>
                     </TableCell>
@@ -451,10 +394,13 @@ export default function UsersPage() {
                     {/* Provider */}
                     <TableCell className="px-4 py-3.5 hidden xl:table-cell">
                       <Badge
-                        color={user.authProvider === "AZURE_AD" ? "primary" : "light"}
+                        color={
+                          user.authProvider === "AZURE_AD" ? "primary" : "light"
+                        }
                         size="sm"
                       >
-                        {AUTH_PROVIDER_LABEL[user.authProvider] ?? user.authProvider}
+                        {AUTH_PROVIDER_LABEL[user.authProvider] ??
+                          user.authProvider}
                       </Badge>
                     </TableCell>
 
