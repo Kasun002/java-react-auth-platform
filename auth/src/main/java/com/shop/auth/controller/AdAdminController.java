@@ -30,7 +30,8 @@ import lombok.RequiredArgsConstructor;
 /**
  * Admin API for managing Azure AD ↔ local UserGroup mappings.
  *
- * <p>Requires the {@code AD_GROUP_MANAGE} permission on every endpoint.
+ * <p>
+ * Requires the {@code AD_GROUP_MANAGE} permission on every endpoint.
  * Mappings control how AD groups (identified by their Object ID or LDAP CN)
  * translate to local UserGroup entities during AD login.
  */
@@ -54,8 +55,8 @@ public class AdAdminController {
 
     @Operation(summary = "Get a single AD group mapping by ID")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Mapping found"),
-        @ApiResponse(responseCode = "404", description = "Mapping not found")
+            @ApiResponse(responseCode = "200", description = "Mapping found"),
+            @ApiResponse(responseCode = "404", description = "Mapping not found")
     })
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
@@ -66,15 +67,13 @@ public class AdAdminController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(
-        summary = "Create a manual AD group mapping",
-        description = "Maps an Azure AD group (by its Object ID or LDAP CN) to a local UserGroup. " +
-                      "This overrides any auto-created mapping for the same AD group."
-    )
+    @Operation(summary = "Create a manual AD group mapping", description = "Maps an Azure AD group (by its Object ID or LDAP CN) to a local UserGroup. "
+            +
+            "This overrides any auto-created mapping for the same AD group.")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "Mapping created"),
-        @ApiResponse(responseCode = "400", description = "Validation error"),
-        @ApiResponse(responseCode = "404", description = "Local UserGroup not found")
+            @ApiResponse(responseCode = "201", description = "Mapping created"),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "404", description = "Local UserGroup not found")
     })
     @PostMapping
     @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
@@ -87,14 +86,12 @@ public class AdAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(
-        summary = "Update the local group for an existing AD mapping",
-        description = "Changes which local UserGroup an AD group maps to. " +
-                      "Automatically clears the auto-created flag."
-    )
+    @Operation(summary = "Update the local group for an existing AD mapping", description = "Changes which local UserGroup an AD group maps to. "
+            +
+            "Automatically clears the auto-created flag.")
     @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "Mapping updated"),
-        @ApiResponse(responseCode = "404", description = "Mapping or local UserGroup not found")
+            @ApiResponse(responseCode = "200", description = "Mapping updated"),
+            @ApiResponse(responseCode = "404", description = "Mapping or local UserGroup not found")
     })
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
@@ -110,8 +107,8 @@ public class AdAdminController {
 
     @Operation(summary = "Delete an AD group mapping")
     @ApiResponses({
-        @ApiResponse(responseCode = "204", description = "Mapping deleted"),
-        @ApiResponse(responseCode = "404", description = "Mapping not found")
+            @ApiResponse(responseCode = "204", description = "Mapping deleted"),
+            @ApiResponse(responseCode = "404", description = "Mapping not found")
     })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")

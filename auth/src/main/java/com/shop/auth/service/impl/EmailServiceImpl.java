@@ -1,15 +1,15 @@
 package com.shop.auth.service.impl;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+
 import com.shop.auth.service.EmailService;
 import com.shop.auth.utils.MaskingUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -47,22 +47,22 @@ public class EmailServiceImpl implements EmailService {
 
     private String buildOtpEmailBody(String name, String otp, int expiryMinutes) {
         return "Dear " + name + ",\n\n"
-             + "Your one-time verification code is:\n\n"
-             + "    " + otp + "\n\n"
-             + "This code expires in " + expiryMinutes + " minutes.\n"
-             + "Do NOT share this code with anyone.\n\n"
-             + "If you did not request this, please ignore this email.\n\n"
-             + "Regards,\nShop Platform";
+                + "Your one-time verification code is:\n\n"
+                + "    " + otp + "\n\n"
+                + "This code expires in " + expiryMinutes + " minutes.\n"
+                + "Do NOT share this code with anyone.\n\n"
+                + "If you did not request this, please ignore this email.\n\n"
+                + "Regards,\nShop Platform";
     }
 
     private String buildPasswordResetEmailBody(String name, String resetLink, int expiryMinutes) {
         return "Dear " + name + ",\n\n"
-             + "We received a request to reset your password.\n\n"
-             + "Click the link below to set a new password. "
-             + "This link expires in " + expiryMinutes + " minutes and can only be used once.\n\n"
-             + "    " + resetLink + "\n\n"
-             + "If you did not request a password reset, you can safely ignore this email.\n"
-             + "Your password will not be changed.\n\n"
-             + "Regards,\nShop Platform Security Team";
+                + "We received a request to reset your password.\n\n"
+                + "Click the link below to set a new password. "
+                + "This link expires in " + expiryMinutes + " minutes and can only be used once.\n\n"
+                + "    " + resetLink + "\n\n"
+                + "If you did not request a password reset, you can safely ignore this email.\n"
+                + "Your password will not be changed.\n\n"
+                + "Regards,\nShop Platform Security Team";
     }
 }

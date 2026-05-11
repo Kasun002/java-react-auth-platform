@@ -5,6 +5,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.shop.auth.dto.CreateRoleRequestDto;
 import com.shop.auth.dto.PermissionDto;
 import com.shop.auth.dto.RoleDto;
@@ -21,18 +24,15 @@ import com.shop.auth.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RoleServiceImpl implements RoleService {
 
-    private final RoleRepository       roleRepository;
+    private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
-    private final UserGroupRepository  userGroupRepository;
+    private final UserGroupRepository userGroupRepository;
 
     @Override
     public List<RoleDto> listAll() {

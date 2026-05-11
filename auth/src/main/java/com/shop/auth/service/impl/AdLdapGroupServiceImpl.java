@@ -23,15 +23,17 @@ import lombok.extern.slf4j.Slf4j;
  * Looks up an Azure AD / corporate LDAP directory to find the groups a user
  * belongs to.
  *
- * <p>When LDAP is not configured ({@code app.ad.ldap.url} is blank) the service
+ * <p>
+ * When LDAP is not configured ({@code app.ad.ldap.url} is blank) the service
  * returns an empty list so the AD login flow continues without group sync.
  *
- * <p>Two-step approach:
+ * <p>
+ * Two-step approach:
  * <ol>
- *   <li>Find the user's DN by searching {@code userSearchBase} with
- *       {@code userSearchFilter} (substituting the user's email).</li>
- *   <li>Find all groups in {@code groupSearchBase} whose membership attribute
- *       ({@code groupSearchFilter}) contains that DN.</li>
+ * <li>Find the user's DN by searching {@code userSearchBase} with
+ * {@code userSearchFilter} (substituting the user's email).</li>
+ * <li>Find all groups in {@code groupSearchBase} whose membership attribute
+ * ({@code groupSearchFilter}) contains that DN.</li>
  * </ol>
  */
 @Slf4j
@@ -97,12 +99,12 @@ public class AdLdapGroupServiceImpl implements AdLdapGroupService {
     private List<LdapGroup> findGroupsForDn(String userDn) {
         AdAuthProperties.LdapConfig ldap = props.getLdap();
         String rawFilter = ldap.getGroupSearchFilter().replace("{0}", escapeForLdap(userDn));
-        String idAttr   = ldap.getGroupIdAttribute();
+        String idAttr = ldap.getGroupIdAttribute();
         String nameAttr = ldap.getGroupNameAttribute();
 
         AttributesMapper<LdapGroup> mapper = (Attributes attrs) -> {
             try {
-                String id   = getAttr(attrs, idAttr);
+                String id = getAttr(attrs, idAttr);
                 String name = getAttr(attrs, nameAttr);
                 return (id != null) ? new LdapGroup(id, name != null ? name : id) : null;
             } catch (NamingException e) {
@@ -115,7 +117,8 @@ public class AdLdapGroupServiceImpl implements AdLdapGroupService {
 
         List<LdapGroup> groups = new ArrayList<>();
         for (LdapGroup g : result) {
-            if (g != null) groups.add(g);
+            if (g != null)
+                groups.add(g);
         }
         log.debug("LDAP found {} group(s) for userDn=[{}]", groups.size(), userDn);
         return groups;
@@ -130,9 +133,9 @@ public class AdLdapGroupServiceImpl implements AdLdapGroupService {
     private String escapeForLdap(String value) {
         return value
                 .replace("\\", "\\5c")
-                .replace("*",  "\\2a")
-                .replace("(",  "\\28")
-                .replace(")",  "\\29")
+                .replace("*", "\\2a")
+                .replace("(", "\\28")
+                .replace(")", "\\29")
                 .replace("\0", "\\00");
     }
 }

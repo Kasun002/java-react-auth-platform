@@ -5,6 +5,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.shop.auth.dto.DashboardStatsDto;
 import com.shop.auth.dto.DashboardStatsDto.CategoryPermCount;
 import com.shop.auth.dto.DashboardStatsDto.GroupMemberCount;
@@ -15,8 +19,8 @@ import com.shop.auth.entity.Permission;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
 import com.shop.auth.entity.UserLog;
-import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.PermissionRepository;
+import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
@@ -27,17 +31,15 @@ import com.shop.auth.utils.UserStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 /**
  * Reads multiple aggregate counts in a single transaction and assembles
  * the {@link DashboardStatsDto} returned by the dashboard endpoint.
  *
- * <p>All queries are read-only. Lazy collections are handled explicitly to
+ * <p>
+ * All queries are read-only. Lazy collections are handled explicitly to
  * avoid N+1 issues — groups are fetched with a single JOIN FETCH query, and
- * recent login user data is resolved via a JOIN FETCH as well.</p>
+ * recent login user data is resolved via a JOIN FETCH as well.
+ * </p>
  */
 @Slf4j
 @Service
@@ -47,11 +49,11 @@ public class DashboardServiceImpl implements DashboardService {
 
     private static final int RECENT_LOGIN_LIMIT = 10;
 
-    private final UserRepository       userRepository;
-    private final UserGroupRepository  userGroupRepository;
-    private final RoleRepository       roleRepository;
+    private final UserRepository userRepository;
+    private final UserGroupRepository userGroupRepository;
+    private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
-    private final UserLogRepository    userLogRepository;
+    private final UserLogRepository userLogRepository;
 
     @Override
     public DashboardStatsDto getStats() {

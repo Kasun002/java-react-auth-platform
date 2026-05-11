@@ -13,13 +13,19 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Redis-backed OTP resend rate limiter using atomic INCR + EXPIRE.
  *
- * <p>Key format: {@code otp:resend:<userId>}.
- * The key is created on the first resend and expires 1 hour later, resetting the window.</p>
+ * <p>
+ * Key format: {@code otp:resend:<userId>}.
+ * The key is created on the first resend and expires 1 hour later, resetting
+ * the window.
+ * </p>
  *
- * <p>INCR is atomic — no race condition between the increment and the limit check.
+ * <p>
+ * INCR is atomic — no race condition between the increment and the limit check.
  * If the incremented value exceeds the cap, the resend is rejected (the counter
- * continues to accumulate, which is intentional: further attempts within the window
- * remain blocked).</p>
+ * continues to accumulate, which is intentional: further attempts within the
+ * window
+ * remain blocked).
+ * </p>
  */
 @Slf4j
 @Service

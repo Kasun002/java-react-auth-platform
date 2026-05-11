@@ -13,6 +13,9 @@ import java.util.stream.Collectors;
 
 import javax.crypto.SecretKey;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
 import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
@@ -23,15 +26,12 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 
 @Service
 public class JwtServiceImpl implements JwtService {
 
-    private static final String ISSUER   = "auth-service";
+    private static final String ISSUER = "auth-service";
     private static final String AUDIENCE = "shop-platform";
 
     @Value("${app.jwt.secret}")
@@ -97,8 +97,10 @@ public class JwtServiceImpl implements JwtService {
     public Long extractUserId(String token) {
         return extractClaim(token, claims -> {
             Object val = claims.get("userId");
-            if (val instanceof Long)    return (Long) val;
-            if (val instanceof Integer) return ((Integer) val).longValue();
+            if (val instanceof Long)
+                return (Long) val;
+            if (val instanceof Integer)
+                return ((Integer) val).longValue();
             return null;
         });
     }
@@ -134,21 +136,21 @@ public class JwtServiceImpl implements JwtService {
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private String buildToken(User user, long expiryMs, TokenType tokenType) {
-        Date now    = new Date();
+        Date now = new Date();
         Date expiry = new Date(now.getTime() + expiryMs);
         return Jwts.builder()
-            .id(UUID.randomUUID().toString())       // jti — enables per-token revocation
-            .issuer(ISSUER)                         // iss — scopes token to this service
-            .audience().add(AUDIENCE).and()         // aud — prevents cross-service replay
-            .subject(user.getEmail())
-            .claim("userId",      user.getId())
-            .claim("tokenType",   tokenType.name())
-            .claim("permissions", computePermissions(user))
-            .claim("groups",      computeGroupNames(user))
-            .issuedAt(now)
-            .expiration(expiry)
-            .signWith(cachedSigningKey)
-            .compact();
+                .id(UUID.randomUUID().toString()) // jti — enables per-token revocation
+                .issuer(ISSUER) // iss — scopes token to this service
+                .audience().add(AUDIENCE).and() // aud — prevents cross-service replay
+                .subject(user.getEmail())
+                .claim("userId", user.getId())
+                .claim("tokenType", tokenType.name())
+                .claim("permissions", computePermissions(user))
+                .claim("groups", computeGroupNames(user))
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(cachedSigningKey)
+                .compact();
     }
 
     /**
@@ -156,7 +158,9 @@ public class JwtServiceImpl implements JwtService {
      * - permissions from all group-assigned roles
      * - permissions from directly assigned roles
      *
-     * <p>Called within the login transaction so LAZY collections are accessible.</p>
+     * <p>
+     * Called within the login transaction so LAZY collections are accessible.
+     * </p>
      */
     private List<String> computePermissions(User user) {
         Set<String> perms = new HashSet<>();
@@ -183,10 +187,10 @@ public class JwtServiceImpl implements JwtService {
 
     private <T> T extractClaim(String token, Function<Claims, T> resolver) {
         Claims claims = Jwts.parser()
-            .verifyWith(cachedSigningKey)
-            .build()
-            .parseSignedClaims(token)
-            .getPayload();
+                .verifyWith(cachedSigningKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
         return resolver.apply(claims);
     }
 }

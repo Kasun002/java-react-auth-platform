@@ -32,11 +32,7 @@ public class RegisterRequestDto {
     @Size(max = 50, message = "Phone number must be at most 50 characters")
     private String phone;
 
-    @Schema(
-        description = "Password — min 12 chars, must include uppercase, lowercase, digit, and special character (PCI-DSS 8.3.6)",
-        example = "Secure@Pass1!",
-        requiredMode = Schema.RequiredMode.REQUIRED
-    )
+    @Schema(description = "Password — min 12 chars, must include uppercase, lowercase, digit, and special character (PCI-DSS 8.3.6)", example = "Secure@Pass1!", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "Password is required")
     @StrongPassword
     private String password;

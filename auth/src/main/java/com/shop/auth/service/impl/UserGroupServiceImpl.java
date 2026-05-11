@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.shop.auth.dto.CreateGroupRequestDto;
 import com.shop.auth.dto.PermissionDto;
 import com.shop.auth.dto.RoleDto;
@@ -26,9 +29,6 @@ import com.shop.auth.service.UserGroupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -36,8 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserGroupServiceImpl implements UserGroupService {
 
     private final UserGroupRepository userGroupRepository;
-    private final RoleRepository      roleRepository;
-    private final UserRepository      userRepository;
+    private final RoleRepository roleRepository;
+    private final UserRepository userRepository;
 
     @Override
     public List<UserGroupDto> listAll() {
@@ -177,7 +177,7 @@ public class UserGroupServiceImpl implements UserGroupService {
     public void addUserToGroup(Long userId, Long groupId) {
         log.debug("Adding user id=[{}] to group id=[{}]", userId, groupId);
 
-        User      user  = userRepository.findById(userId)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));

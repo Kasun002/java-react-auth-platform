@@ -6,7 +6,8 @@ import org.springframework.context.annotation.Configuration;
 import lombok.Data;
 
 /**
- * Configuration properties for Azure AD / OIDC token validation and LDAP group lookup.
+ * Configuration properties for Azure AD / OIDC token validation and LDAP group
+ * lookup.
  *
  * <pre>
  * app.ad.enabled=true
@@ -38,7 +39,8 @@ public class AdAuthProperties {
     /**
      * JWKS endpoint used to verify the ID token signature.
      * Azure AD: https://login.microsoftonline.com/{tenantId}/discovery/v2.0/keys
-     * Keycloak: http://localhost:8180/realms/corporate/protocol/openid-connect/certs
+     * Keycloak:
+     * http://localhost:8180/realms/corporate/protocol/openid-connect/certs
      */
     private String jwksUri;
 
@@ -57,9 +59,10 @@ public class AdAuthProperties {
 
     /**
      * Strategy applied when an AD group has no local mapping.
-     * AUTO_CREATE — create a new local UserGroup named after the AD group and map it.
-     * DEFAULT      — assign the user to the configured defaultGroupName.
-     * SKIP         — ignore the unmapped group (user gets no group from it).
+     * AUTO_CREATE — create a new local UserGroup named after the AD group and map
+     * it.
+     * DEFAULT — assign the user to the configured defaultGroupName.
+     * SKIP — ignore the unmapped group (user gets no group from it).
      */
     private UnmappedGroupStrategy unmappedGroupStrategy = UnmappedGroupStrategy.DEFAULT;
 
@@ -103,7 +106,7 @@ public class AdAuthProperties {
         /**
          * LDAP filter to find the groups a user belongs to.
          * {0} is replaced with the user's full DN.
-         * AD: (member={0})  OpenLDAP: (memberUid={0}) or (member={0})
+         * AD: (member={0}) OpenLDAP: (memberUid={0}) or (member={0})
          */
         private String groupSearchFilter = "(member={0})";
 
@@ -119,7 +122,7 @@ public class AdAuthProperties {
         /**
          * LDAP filter to find a user entry by email / UPN.
          * {0} is replaced with the user's email.
-         * AD: (userPrincipalName={0})  OpenLDAP: (mail={0})
+         * AD: (userPrincipalName={0}) OpenLDAP: (mail={0})
          */
         private String userSearchFilter = "(mail={0})";
     }

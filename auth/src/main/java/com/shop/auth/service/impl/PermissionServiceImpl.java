@@ -4,6 +4,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.shop.auth.dto.CreatePermissionRequestDto;
 import com.shop.auth.dto.PermissionDto;
 import com.shop.auth.dto.UpdatePermissionRequestDto;
@@ -17,9 +20,6 @@ import com.shop.auth.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PermissionServiceImpl implements PermissionService {
 
     private final PermissionRepository permissionRepository;
-    private final RoleRepository       roleRepository;
+    private final RoleRepository roleRepository;
 
     @Override
     public List<PermissionDto> listAll() {
@@ -93,7 +93,8 @@ public class PermissionServiceImpl implements PermissionService {
 
         if (roleRepository.existsByPermissionsId(id)) {
             throw new ConflictException(
-                    "Permission '" + permission.getCode() + "' is still assigned to one or more roles and cannot be deleted");
+                    "Permission '" + permission.getCode()
+                            + "' is still assigned to one or more roles and cannot be deleted");
         }
 
         permissionRepository.delete(permission);

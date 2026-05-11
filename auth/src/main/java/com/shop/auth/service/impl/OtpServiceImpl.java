@@ -45,26 +45,32 @@ public class OtpServiceImpl implements OtpService {
     private int maxResendsPerHour;
 
     private final OtpVerificationRepository otpVerificationRepository;
-    private final UserRepository            userRepository;
-    private final OtpEmailPublisher         otpEmailPublisher;
-    private final OtpRateLimitService       otpRateLimitService;
+    private final UserRepository userRepository;
+    private final OtpEmailPublisher otpEmailPublisher;
+    private final OtpRateLimitService otpRateLimitService;
 
     // ── Generate & Send ───────────────────────────────────────────────────────
 
     /**
-     * Joins the caller's transaction (REQUIRED) so the OTP record is inserted in the same
-     * transaction as the user row — avoiding the FK violation that REQUIRES_NEW caused
-     * (the inner transaction couldn't see the uncommitted user row in the outer transaction).
+     * Joins the caller's transaction (REQUIRED) so the OTP record is inserted in
+     * the same
+     * transaction as the user row — avoiding the FK violation that REQUIRES_NEW
+     * caused
+     * (the inner transaction couldn't see the uncommitted user row in the outer
+     * transaction).
      *
-     * SQS publish is wrapped in its own try-catch so a queue failure does not mark the
-     * transaction rollback-only. The OTP record is committed with the user; the account
+     * SQS publish is wrapped in its own try-catch so a queue failure does not mark
+     * the
+     * transaction rollback-only. The OTP record is committed with the user; the
+     * account
      * holder can retry delivery via {@code /auth/resend-otp}.
      */
     @Override
     @Transactional
     public void generateAndSend(User user) {
         // Invalidate any existing unused OTPs before issuing a new one.
-        // A previously captured (but undelivered or intercepted) OTP must not remain valid.
+        // A previously captured (but undelivered or intercepted) OTP must not remain
+        // valid.
         otpVerificationRepository.invalidateAllUnusedForUser(user);
 
         String rawOtp = Otp.generateRawOtp();
@@ -76,7 +82,8 @@ public class OtpServiceImpl implements OtpService {
         otpVerificationRepository.save(record);
 
         // Publish to SQS — the consumer delivers via SES asynchronously.
-        // Swallow publish failures: the OTP record is already persisted, so the user can
+        // Swallow publish failures: the OTP record is already persisted, so the user
+        // can
         // trigger a fresh delivery via /auth/resend-otp without re-registering.
         try {
             OtpEmailMessage message = new OtpEmailMessage(
@@ -90,7 +97,8 @@ public class OtpServiceImpl implements OtpService {
             log.info("OTP generated and queued for delivery: email=[{}]",
                     MaskingUtil.maskEmail(user.getEmail()));
         } catch (Exception e) {
-            log.error("OTP email publish failed for email=[{}] — OTP record saved, user can resend via /auth/resend-otp",
+            log.error(
+                    "OTP email publish failed for email=[{}] — OTP record saved, user can resend via /auth/resend-otp",
                     MaskingUtil.maskEmail(user.getEmail()), e);
         }
     }
@@ -109,12 +117,12 @@ public class OtpServiceImpl implements OtpService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     log.warn("OTP verify — email not found: [{}]", MaskingUtil.maskEmail(email));
-                    return new OtpInvalidException();   // same error — prevents enumeration
+                    return new OtpInvalidException(); // same error — prevents enumeration
                 });
 
         if (user.getStatus() == UserStatus.ACTIVE) {
             log.info("OTP verify — account already active: [{}]", MaskingUtil.maskEmail(email));
-            return;                                     // idempotent: already verified
+            return; // idempotent: already verified
         }
 
         if (user.getStatus() != UserStatus.NEW) {
@@ -140,11 +148,13 @@ public class OtpServiceImpl implements OtpService {
             throw new OtpMaxAttemptsException();
         }
 
-        // Increment attempts pessimistically before checking — count is committed even on mismatch
+        // Increment attempts pessimistically before checking — count is committed even
+        // on mismatch
         record.setAttempts(record.getAttempts() + 1);
         otpVerificationRepository.save(record);
 
-        // Constant-time comparison — prevents timing side-channel on the hash comparison.
+        // Constant-time comparison — prevents timing side-channel on the hash
+        // comparison.
         // MessageDigest.isEqual is guaranteed constant-time for equal-length inputs;
         // both operands are always 64-byte UTF-8 hex strings.
         boolean hashMatch = MessageDigest.isEqual(
@@ -175,12 +185,12 @@ public class OtpServiceImpl implements OtpService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     log.warn("OTP resend — email not found: [{}]", MaskingUtil.maskEmail(email));
-                    return new OtpInvalidException();   // same error — prevents enumeration
+                    return new OtpInvalidException(); // same error — prevents enumeration
                 });
 
         if (user.getStatus() == UserStatus.ACTIVE) {
             log.info("OTP resend — account already active: [{}]", MaskingUtil.maskEmail(email));
-            return;                                     // idempotent
+            return; // idempotent
         }
 
         if (user.getStatus() != UserStatus.NEW) {

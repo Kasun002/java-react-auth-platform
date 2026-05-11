@@ -17,9 +17,6 @@ public class ResetPasswordRequestDto {
 
     @NotBlank(message = "New password is required")
     @StrongPassword
-    @Schema(
-        description = "New password — min 12 chars, must include uppercase, lowercase, digit, and special character",
-        example = "NewSecure@Pass2!"
-    )
+    @Schema(description = "New password — min 12 chars, must include uppercase, lowercase, digit, and special character", example = "NewSecure@Pass2!")
     private String newPassword;
 }
