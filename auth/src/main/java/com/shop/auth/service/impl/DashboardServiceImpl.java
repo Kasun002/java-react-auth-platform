@@ -15,7 +15,7 @@ import com.shop.auth.entity.Permission;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
 import com.shop.auth.entity.UserLog;
-import com.shop.auth.repository.BankingRoleRepository;
+import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.PermissionRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
@@ -49,7 +49,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     private final UserRepository       userRepository;
     private final UserGroupRepository  userGroupRepository;
-    private final BankingRoleRepository bankingRoleRepository;
+    private final RoleRepository       roleRepository;
     private final PermissionRepository permissionRepository;
     private final UserLogRepository    userLogRepository;
 
@@ -74,7 +74,7 @@ public class DashboardServiceImpl implements DashboardService {
         KpiStats kpi = new KpiStats();
         kpi.setTotalUsers(userRepository.count());
         kpi.setTotalGroups(userGroupRepository.count());
-        kpi.setTotalRoles(bankingRoleRepository.count());
+        kpi.setTotalRoles(roleRepository.count());
         kpi.setTotalPermissions(permissionRepository.count());
         return kpi;
     }

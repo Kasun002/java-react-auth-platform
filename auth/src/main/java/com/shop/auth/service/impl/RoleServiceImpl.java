@@ -4,14 +4,14 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import com.shop.auth.dto.BankingRoleDto;
 import com.shop.auth.dto.PermissionDto;
-import com.shop.auth.entity.BankingRole;
+import com.shop.auth.dto.RoleDto;
 import com.shop.auth.entity.Permission;
+import com.shop.auth.entity.Role;
 import com.shop.auth.exception.ResourceNotFoundException;
-import com.shop.auth.repository.BankingRoleRepository;
 import com.shop.auth.repository.PermissionRepository;
-import com.shop.auth.service.BankingRoleService;
+import com.shop.auth.repository.RoleRepository;
+import com.shop.auth.service.RoleService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,34 +23,34 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class BankingRoleServiceImpl implements BankingRoleService {
+public class RoleServiceImpl implements RoleService {
 
-    private final BankingRoleRepository bankingRoleRepository;
-    private final PermissionRepository  permissionRepository;
+    private final RoleRepository       roleRepository;
+    private final PermissionRepository permissionRepository;
 
     @Override
-    public List<BankingRoleDto> listAll() {
-        log.debug("Listing all banking roles");
-        return bankingRoleRepository.findAll().stream()
-                .sorted(Comparator.comparing(BankingRole::getName))
+    public List<RoleDto> listAll() {
+        log.debug("Listing all roles");
+        return roleRepository.findAll().stream()
+                .sorted(Comparator.comparing(Role::getName))
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public BankingRoleDto getById(Long roleId) {
-        log.debug("Fetching banking role id=[{}]", roleId);
-        return bankingRoleRepository.findById(roleId)
+    public RoleDto getById(Long roleId) {
+        log.debug("Fetching role id=[{}]", roleId);
+        return roleRepository.findById(roleId)
                 .map(this::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
     }
 
     @Override
     @Transactional
-    public BankingRoleDto assignPermission(Long roleId, Long permissionId) {
+    public RoleDto assignPermission(Long roleId, Long permissionId) {
         log.debug("Assigning permission id=[{}] to role id=[{}]", permissionId, roleId);
 
-        BankingRole role = bankingRoleRepository.findById(roleId)
+        Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
         Permission permission = permissionRepository.findById(permissionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Permission", permissionId));
@@ -60,7 +60,7 @@ public class BankingRoleServiceImpl implements BankingRoleService {
 
         if (!alreadyAssigned) {
             role.getPermissions().add(permission);
-            bankingRoleRepository.save(role);
+            roleRepository.save(role);
             log.info("Permission [{}] assigned to role [{}]", permission.getCode(), role.getName());
         } else {
             log.debug("Permission [{}] already assigned to role [{}] — no-op", permission.getCode(), role.getName());
@@ -74,16 +74,15 @@ public class BankingRoleServiceImpl implements BankingRoleService {
     public void removePermission(Long roleId, Long permissionId) {
         log.debug("Removing permission id=[{}] from role id=[{}]", permissionId, roleId);
 
-        BankingRole role = bankingRoleRepository.findById(roleId)
+        Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
-        // Verify the permission exists before attempting removal
         if (!permissionRepository.existsById(permissionId)) {
             throw new ResourceNotFoundException("Permission", permissionId);
         }
 
         boolean removed = role.getPermissions().removeIf(p -> p.getId().equals(permissionId));
         if (removed) {
-            bankingRoleRepository.save(role);
+            roleRepository.save(role);
             log.info("Permission id=[{}] removed from role [{}]", permissionId, role.getName());
         } else {
             log.debug("Permission id=[{}] was not assigned to role [{}] — no-op", permissionId, role.getName());
@@ -92,8 +91,8 @@ public class BankingRoleServiceImpl implements BankingRoleService {
 
     // ── Mapper ────────────────────────────────────────────────────────────────
 
-    BankingRoleDto toDto(BankingRole role) {
-        BankingRoleDto dto = new BankingRoleDto();
+    RoleDto toDto(Role role) {
+        RoleDto dto = new RoleDto();
         dto.setId(role.getId());
         dto.setName(role.getName());
         dto.setDescription(role.getDescription());

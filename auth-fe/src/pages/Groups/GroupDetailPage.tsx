@@ -22,7 +22,7 @@ import {
   assignRoleToGroup,
   removeRoleFromGroup,
 } from "../../services/adminService";
-import type { BankingRoleDto, UserGroupDto } from "../../types/admin";
+import type { RoleDto, UserGroupDto } from "../../types/admin";
 import { USERS } from "../../temp_data/rbacData";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ function AssignRoleModal({
   onClose,
   onAssigned,
 }: AssignRoleModalProps) {
-  const [availableRoles, setAvailableRoles] = useState<BankingRoleDto[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<RoleDto[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

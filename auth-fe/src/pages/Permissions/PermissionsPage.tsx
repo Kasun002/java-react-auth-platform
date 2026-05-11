@@ -10,11 +10,11 @@ import {
 } from "../../components/ui/table";
 import { BoltIcon } from "../../icons";
 import { listPermissions, listRoles } from "../../services/adminService";
-import type { BankingRoleDto, PermissionDto } from "../../types/admin";
+import type { RoleDto, PermissionDto } from "../../types/admin";
 
 export default function PermissionsPage() {
   const [permissions, setPermissions] = useState<PermissionDto[]>([]);
-  const [roles, setRoles] = useState<BankingRoleDto[]>([]);
+  const [roles, setRoles] = useState<RoleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [catFilter, setCatFilter] = useState("ALL");

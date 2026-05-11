@@ -56,7 +56,7 @@ export interface PermissionDto {
   category: string;
 }
 
-export interface BankingRoleDto {
+export interface RoleDto {
   id: number;
   name: string;
   description: string;
@@ -67,6 +67,6 @@ export interface UserGroupDto {
   id: number;
   name: string;
   description: string;
-  type: "CUSTOMER" | "STAFF" | "OVERSIGHT" | "ADMIN";
-  roles: BankingRoleDto[];
+  type: string;   // free-form — defined by the organization
+  roles: RoleDto[];
 }

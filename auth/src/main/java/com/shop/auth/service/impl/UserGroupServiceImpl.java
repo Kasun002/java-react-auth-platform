@@ -7,15 +7,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.shop.auth.dto.BankingRoleDto;
 import com.shop.auth.dto.PermissionDto;
+import com.shop.auth.dto.RoleDto;
 import com.shop.auth.dto.UserGroupDto;
-import com.shop.auth.entity.BankingRole;
 import com.shop.auth.entity.Permission;
+import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
 import com.shop.auth.exception.ResourceNotFoundException;
-import com.shop.auth.repository.BankingRoleRepository;
+import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.UserGroupService;
@@ -32,9 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class UserGroupServiceImpl implements UserGroupService {
 
-    private final UserGroupRepository   userGroupRepository;
-    private final BankingRoleRepository bankingRoleRepository;
-    private final UserRepository        userRepository;
+    private final UserGroupRepository userGroupRepository;
+    private final RoleRepository      roleRepository;
+    private final UserRepository      userRepository;
 
     @Override
     public List<UserGroupDto> listAll() {
@@ -60,7 +60,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
-        BankingRole role = bankingRoleRepository.findById(roleId)
+        Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
 
         boolean alreadyAssigned = group.getRoles().stream()
@@ -84,7 +84,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
-        if (!bankingRoleRepository.existsById(roleId)) {
+        if (!roleRepository.existsById(roleId)) {
             throw new ResourceNotFoundException("Role", roleId);
         }
 
@@ -161,12 +161,12 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         // Via group memberships
         for (UserGroup group : user.getGroups()) {
-            for (BankingRole role : group.getRoles()) {
+            for (Role role : group.getRoles()) {
                 role.getPermissions().forEach(p -> permissions.add(p.getCode()));
             }
         }
         // Via direct role assignments
-        for (BankingRole role : user.getDirectRoles()) {
+        for (Role role : user.getDirectRoles()) {
             role.getPermissions().forEach(p -> permissions.add(p.getCode()));
         }
 
@@ -183,14 +183,14 @@ public class UserGroupServiceImpl implements UserGroupService {
         dto.setDescription(group.getDescription());
         dto.setType(group.getType());
         dto.setRoles(group.getRoles().stream()
-                .sorted(Comparator.comparing(BankingRole::getName))
+                .sorted(Comparator.comparing(Role::getName))
                 .map(this::toRoleDto)
                 .collect(Collectors.toList()));
         return dto;
     }
 
-    private BankingRoleDto toRoleDto(BankingRole role) {
-        BankingRoleDto dto = new BankingRoleDto();
+    private RoleDto toRoleDto(Role role) {
+        RoleDto dto = new RoleDto();
         dto.setId(role.getId());
         dto.setName(role.getName());
         dto.setDescription(role.getDescription());

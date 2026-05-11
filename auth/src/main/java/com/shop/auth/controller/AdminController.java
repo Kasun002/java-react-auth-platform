@@ -6,15 +6,15 @@ import java.util.Set;
 import com.shop.auth.dto.AssignGroupRequestDto;
 import com.shop.auth.dto.AssignPermissionToRoleRequestDto;
 import com.shop.auth.dto.AssignRoleToGroupRequestDto;
-import com.shop.auth.dto.BankingRoleDto;
 import com.shop.auth.dto.PageDto;
 import com.shop.auth.dto.PermissionDto;
 import com.shop.auth.dto.ResponseDto;
+import com.shop.auth.dto.RoleDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.UserGroupDto;
 import com.shop.auth.service.AuthService;
-import com.shop.auth.service.BankingRoleService;
 import com.shop.auth.service.PermissionService;
+import com.shop.auth.service.RoleService;
 import com.shop.auth.service.UserGroupService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,14 +50,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>
  * All endpoints require a valid ACCESS JWT. Fine-grained authority checks are
- * enforced
- * via {@code @PreAuthorize}. Any request without sufficient authority returns
- * 403.
- * </p>
- *
- * <p>
- * Banking standards: PCI-DSS v4 Req 7.2 (least privilege), ISO 27001 A.9.4.2
- * (separation of duties). All admin actions are logged via MDC correlation ID.
+ * enforced via {@code @PreAuthorize}. Any request without sufficient authority
+ * returns 403.
  * </p>
  */
 @Slf4j
@@ -69,15 +63,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final PermissionService permissionService;
-    private final BankingRoleService bankingRoleService;
-    private final UserGroupService userGroupService;
-    private final AuthService authService;
+    private final RoleService       roleService;
+    private final UserGroupService  userGroupService;
+    private final AuthService       authService;
 
     // ══════════════════════════════════════════════════════════════════════════
     // Permissions
     // ══════════════════════════════════════════════════════════════════════════
 
-    @Operation(summary = "List all permissions", description = "Returns all atomic permission codes sorted by category and code.")
+    @Operation(summary = "List all permissions", description = "Returns all permission codes sorted by category and code.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Permission list returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
@@ -100,7 +94,7 @@ public class AdminController {
     // Roles
     // ══════════════════════════════════════════════════════════════════════════
 
-    @Operation(summary = "List all roles", description = "Returns all banking roles with their assigned permissions.")
+    @Operation(summary = "List all roles", description = "Returns all roles with their assigned permissions.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Role list returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
@@ -108,18 +102,18 @@ public class AdminController {
     })
     @GetMapping("/roles")
     @PreAuthorize("hasAuthority('ROLE_MANAGE')")
-    public ResponseEntity<ResponseDto<List<BankingRoleDto>>> listRoles() {
-        log.info("Admin: listing all banking roles");
-        List<BankingRoleDto> data = bankingRoleService.listAll();
+    public ResponseEntity<ResponseDto<List<RoleDto>>> listRoles() {
+        log.info("Admin: listing all roles");
+        List<RoleDto> data = roleService.listAll();
 
-        ResponseDto<List<BankingRoleDto>> response = new ResponseDto<>();
+        ResponseDto<List<RoleDto>> response = new ResponseDto<>();
         response.setStatus(ResponseDto.Status.SUCCESS);
         response.setData(data);
         response.setMessage(data.size() + " role(s) found");
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "Get role by ID", description = "Returns a single banking role with its permissions.")
+    @Operation(summary = "Get role by ID", description = "Returns a single role with its permissions.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Role returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
@@ -128,12 +122,12 @@ public class AdminController {
     })
     @GetMapping("/roles/{id}")
     @PreAuthorize("hasAuthority('ROLE_MANAGE')")
-    public ResponseEntity<ResponseDto<BankingRoleDto>> getRole(
+    public ResponseEntity<ResponseDto<RoleDto>> getRole(
             @Parameter(description = "Role ID") @PathVariable Long id) {
         log.info("Admin: fetching role id=[{}]", id);
-        BankingRoleDto data = bankingRoleService.getById(id);
+        RoleDto data = roleService.getById(id);
 
-        ResponseDto<BankingRoleDto> response = new ResponseDto<>();
+        ResponseDto<RoleDto> response = new ResponseDto<>();
         response.setStatus(ResponseDto.Status.SUCCESS);
         response.setData(data);
         return ResponseEntity.ok(response);
@@ -149,13 +143,13 @@ public class AdminController {
     })
     @PostMapping("/roles/{id}/permissions")
     @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
-    public ResponseEntity<ResponseDto<BankingRoleDto>> assignPermissionToRole(
+    public ResponseEntity<ResponseDto<RoleDto>> assignPermissionToRole(
             @Parameter(description = "Role ID") @PathVariable Long id,
             @Valid @RequestBody AssignPermissionToRoleRequestDto request) {
         log.info("Admin: assigning permission id=[{}] to role id=[{}]", request.getPermissionId(), id);
-        BankingRoleDto data = bankingRoleService.assignPermission(id, request.getPermissionId());
+        RoleDto data = roleService.assignPermission(id, request.getPermissionId());
 
-        ResponseDto<BankingRoleDto> response = new ResponseDto<>();
+        ResponseDto<RoleDto> response = new ResponseDto<>();
         response.setStatus(ResponseDto.Status.SUCCESS);
         response.setMessage("Permission assigned successfully");
         response.setData(data);
@@ -175,7 +169,7 @@ public class AdminController {
             @Parameter(description = "Role ID") @PathVariable Long id,
             @Parameter(description = "Permission ID") @PathVariable Long permissionId) {
         log.info("Admin: removing permission id=[{}] from role id=[{}]", permissionId, id);
-        bankingRoleService.removePermission(id, permissionId);
+        roleService.removePermission(id, permissionId);
         return ResponseEntity.noContent().build();
     }
 
@@ -222,7 +216,7 @@ public class AdminController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "Assign role to group", description = "Adds a banking role to a group. Idempotent — no error if already assigned.")
+    @Operation(summary = "Assign role to group", description = "Adds a role to a group. Idempotent — no error if already assigned.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Role assigned — updated group returned"),
             @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
@@ -331,8 +325,7 @@ public class AdminController {
     // ══════════════════════════════════════════════════════════════════════════
 
     @Operation(summary = "Get user effective permissions", description = "Returns the complete set of permission codes a user holds — "
-            + "union of permissions from all group-assigned roles and direct role assignments. "
-            + "Use for periodic access reviews (PCI-DSS v4 Req 7.2).")
+            + "union of permissions from all group-assigned roles and direct role assignments.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Permission set returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
@@ -358,8 +351,7 @@ public class AdminController {
     // ══════════════════════════════════════════════════════════════════════════
 
     @Operation(summary = "List all users (paginated)", description = "Returns all users with their group, role and permission context. "
-            + "Passwords and security-sensitive fields are never included. "
-            + "Supports sorting by any User field via the `sort` parameter.")
+            + "Passwords and security-sensitive fields are never included.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "User page returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),

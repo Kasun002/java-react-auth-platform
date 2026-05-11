@@ -7,14 +7,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shop.auth.dto.AssignGroupRequestDto;
 import com.shop.auth.dto.AssignPermissionToRoleRequestDto;
 import com.shop.auth.dto.AssignRoleToGroupRequestDto;
-import com.shop.auth.dto.BankingRoleDto;
 import com.shop.auth.dto.PermissionDto;
+import com.shop.auth.dto.RoleDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.UserGroupDto;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.exception.handler.GlobalExceptionHandler;
 import com.shop.auth.service.AuthService;
-import com.shop.auth.service.BankingRoleService;
+import com.shop.auth.service.RoleService;
 import com.shop.auth.service.PermissionService;
 import com.shop.auth.service.UserGroupService;
 import com.shop.auth.utils.UserStatus;
@@ -33,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.http.MediaType;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -56,10 +57,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 class AdminControllerTest {
 
-    @Mock private PermissionService  permissionService;
-    @Mock private BankingRoleService bankingRoleService;
-    @Mock private UserGroupService   userGroupService;
-    @Mock private AuthService        authService;
+    @Mock private PermissionService permissionService;
+    @Mock private RoleService       roleService;
+    @Mock private UserGroupService  userGroupService;
+    @Mock private AuthService       authService;
 
     private MockMvc      mockMvc;
     private ObjectMapper objectMapper;
@@ -68,8 +69,9 @@ class AdminControllerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AdminController(permissionService, bankingRoleService, userGroupService, authService))
+                .standaloneSetup(new AdminController(permissionService, roleService, userGroupService, authService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .build();
     }
 
@@ -83,11 +85,11 @@ class AdminControllerTest {
         return dto;
     }
 
-    private BankingRoleDto makeRole(Long id, String name) {
-        BankingRoleDto dto = new BankingRoleDto();
+    private RoleDto makeRole(Long id, String name) {
+        RoleDto dto = new RoleDto();
         dto.setId(id);
         dto.setName(name);
-        dto.setPermissions(List.of(makePermission(1L, "ACCOUNT_VIEW", "ACCOUNT")));
+        dto.setPermissions(List.of(makePermission(1L, "USER_VIEW", "USER")));
         return dto;
     }
 
@@ -96,7 +98,7 @@ class AdminControllerTest {
         dto.setId(id);
         dto.setName(name);
         dto.setType(type);
-        dto.setRoles(List.of(makeRole(5L, "ROLE_CUSTOMER_BASIC")));
+        dto.setRoles(List.of(makeRole(5L, "ROLE_MANAGER")));
         return dto;
     }
 
@@ -134,13 +136,13 @@ class AdminControllerTest {
         @Test
         @DisplayName("Returns 200 with role list including permissions")
         void shouldReturn200WithRoles() throws Exception {
-            when(bankingRoleService.listAll()).thenReturn(List.of(makeRole(10L, "ROLE_TELLER")));
+            when(roleService.listAll()).thenReturn(List.of(makeRole(10L, "ROLE_MANAGER")));
 
             mockMvc.perform(get("/admin/roles"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("SUCCESS"))
                     .andExpect(jsonPath("$.data", hasSize(1)))
-                    .andExpect(jsonPath("$.data[0].name").value("ROLE_TELLER"))
+                    .andExpect(jsonPath("$.data[0].name").value("ROLE_MANAGER"))
                     .andExpect(jsonPath("$.data[0].permissions", hasSize(1)));
         }
     }
@@ -156,18 +158,18 @@ class AdminControllerTest {
         @Test
         @DisplayName("Returns 200 with role detail")
         void shouldReturn200WhenFound() throws Exception {
-            when(bankingRoleService.getById(10L)).thenReturn(makeRole(10L, "ROLE_TELLER"));
+            when(roleService.getById(10L)).thenReturn(makeRole(10L, "ROLE_MANAGER"));
 
             mockMvc.perform(get("/admin/roles/10"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.id", is(10)))
-                    .andExpect(jsonPath("$.data.name").value("ROLE_TELLER"));
+                    .andExpect(jsonPath("$.data.name").value("ROLE_MANAGER"));
         }
 
         @Test
         @DisplayName("Returns 404 when role not found")
         void shouldReturn404WhenNotFound() throws Exception {
-            when(bankingRoleService.getById(99L))
+            when(roleService.getById(99L))
                     .thenThrow(new ResourceNotFoundException("Role", 99L));
 
             mockMvc.perform(get("/admin/roles/99"))
@@ -191,14 +193,14 @@ class AdminControllerTest {
             AssignPermissionToRoleRequestDto req = new AssignPermissionToRoleRequestDto();
             req.setPermissionId(1L);
 
-            when(bankingRoleService.assignPermission(10L, 1L)).thenReturn(makeRole(10L, "ROLE_TELLER"));
+            when(roleService.assignPermission(10L, 1L)).thenReturn(makeRole(10L, "ROLE_MANAGER"));
 
             mockMvc.perform(post("/admin/roles/10/permissions")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("SUCCESS"))
-                    .andExpect(jsonPath("$.data.name").value("ROLE_TELLER"));
+                    .andExpect(jsonPath("$.data.name").value("ROLE_MANAGER"));
         }
 
         @Test
@@ -217,7 +219,7 @@ class AdminControllerTest {
             AssignPermissionToRoleRequestDto req = new AssignPermissionToRoleRequestDto();
             req.setPermissionId(99L);
 
-            when(bankingRoleService.assignPermission(10L, 99L))
+            when(roleService.assignPermission(10L, 99L))
                     .thenThrow(new ResourceNotFoundException("Permission", 99L));
 
             mockMvc.perform(post("/admin/roles/10/permissions")
@@ -238,7 +240,7 @@ class AdminControllerTest {
         @Test
         @DisplayName("Returns 204 on success")
         void shouldReturn204() throws Exception {
-            doNothing().when(bankingRoleService).removePermission(10L, 1L);
+            doNothing().when(roleService).removePermission(10L, 1L);
 
             mockMvc.perform(delete("/admin/roles/10/permissions/1"))
                     .andExpect(status().isNoContent());
@@ -248,7 +250,7 @@ class AdminControllerTest {
         @DisplayName("Returns 404 when role not found")
         void shouldReturn404WhenRoleNotFound() throws Exception {
             doThrow(new ResourceNotFoundException("Role", 99L))
-                    .when(bankingRoleService).removePermission(eq(99L), anyLong());
+                    .when(roleService).removePermission(eq(99L), anyLong());
 
             mockMvc.perform(delete("/admin/roles/99/permissions/1"))
                     .andExpect(status().isNotFound());
@@ -267,12 +269,12 @@ class AdminControllerTest {
         @DisplayName("Returns 200 with group list")
         void shouldReturn200WithGroups() throws Exception {
             when(userGroupService.listAll()).thenReturn(List.of(
-                    makeGroup(1L, "RETAIL_CUSTOMER", "CUSTOMER")));
+                    makeGroup(1L, "SYSTEM_ADMIN", "CUSTOMER")));
 
             mockMvc.perform(get("/admin/groups"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(1)))
-                    .andExpect(jsonPath("$.data[0].name").value("RETAIL_CUSTOMER"))
+                    .andExpect(jsonPath("$.data[0].name").value("SYSTEM_ADMIN"))
                     .andExpect(jsonPath("$.data[0].type").value("CUSTOMER"));
         }
     }
@@ -292,14 +294,14 @@ class AdminControllerTest {
             req.setRoleId(5L);
 
             when(userGroupService.assignRoleToGroup(1L, 5L))
-                    .thenReturn(makeGroup(1L, "RETAIL_CUSTOMER", "CUSTOMER"));
+                    .thenReturn(makeGroup(1L, "SYSTEM_ADMIN", "CUSTOMER"));
 
             mockMvc.perform(post("/admin/groups/1/roles")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("SUCCESS"))
-                    .andExpect(jsonPath("$.data.name").value("RETAIL_CUSTOMER"));
+                    .andExpect(jsonPath("$.data.name").value("SYSTEM_ADMIN"));
         }
 
         @Test
@@ -342,12 +344,12 @@ class AdminControllerTest {
         @DisplayName("Returns 200 with user's groups")
         void shouldReturn200() throws Exception {
             when(userGroupService.getUserGroups(42L))
-                    .thenReturn(List.of(makeGroup(1L, "RETAIL_CUSTOMER", "CUSTOMER")));
+                    .thenReturn(List.of(makeGroup(1L, "SYSTEM_ADMIN", "CUSTOMER")));
 
             mockMvc.perform(get("/admin/users/42/groups"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(1)))
-                    .andExpect(jsonPath("$.data[0].name").value("RETAIL_CUSTOMER"));
+                    .andExpect(jsonPath("$.data[0].name").value("SYSTEM_ADMIN"));
         }
 
         @Test
@@ -425,7 +427,7 @@ class AdminControllerTest {
             dto.setName(name);
             dto.setEmail(email);
             dto.setStatus(UserStatus.ACTIVE);
-            dto.setGroups(List.of("RETAIL_CUSTOMER"));
+            dto.setGroups(List.of("SYSTEM_ADMIN"));
             dto.setRoles(List.of());
             dto.setEffectivePermissions(List.of());
             return dto;

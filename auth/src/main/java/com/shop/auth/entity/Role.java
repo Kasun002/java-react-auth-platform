@@ -22,8 +22,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Entity
-@Table(name = "banking_roles")
-public class BankingRole {
+@Table(name = "roles")
+public class Role {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

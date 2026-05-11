@@ -11,13 +11,13 @@ import {
 } from "../../components/ui/table";
 import { LockIcon, GroupIcon } from "../../icons";
 import { listRoles } from "../../services/adminService";
-import type { BankingRoleDto } from "../../types/admin";
+import type { RoleDto } from "../../types/admin";
 import { GROUPS, USERS } from "../../temp_data/rbacData";
 
 export default function RolesPage() {
   const navigate = useNavigate();
 
-  const [roles, setRoles] = useState<BankingRoleDto[]>([]);
+  const [roles, setRoles] = useState<RoleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

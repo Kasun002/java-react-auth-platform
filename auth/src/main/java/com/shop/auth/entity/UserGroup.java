@@ -36,7 +36,7 @@ public class UserGroup {
     @Column(length = 500)
     private String description;
 
-    /** Group type: CUSTOMER | STAFF | OVERSIGHT | ADMIN */
+    /** Group type — free-form string, defined by the organization. */
     @Column(nullable = false, length = 50)
     private String type;
 
@@ -46,7 +46,7 @@ public class UserGroup {
         joinColumns        = @JoinColumn(name = "group_id"),
         inverseJoinColumns = @JoinColumn(name = "role_id")
     )
-    private Set<BankingRole> roles = new HashSet<>();
+    private Set<Role> roles = new HashSet<>();
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 
 import javax.crypto.SecretKey;
 
-import com.shop.auth.entity.BankingRole;
+import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
 import com.shop.auth.service.JwtService;
@@ -162,11 +162,11 @@ public class JwtServiceImpl implements JwtService {
     private List<String> computePermissions(User user) {
         Set<String> perms = new HashSet<>();
         for (UserGroup group : user.getGroups()) {
-            for (BankingRole role : group.getRoles()) {
+            for (Role role : group.getRoles()) {
                 role.getPermissions().forEach(p -> perms.add(p.getCode()));
             }
         }
-        for (BankingRole role : user.getDirectRoles()) {
+        for (Role role : user.getDirectRoles()) {
             role.getPermissions().forEach(p -> perms.add(p.getCode()));
         }
         return new ArrayList<>(perms);

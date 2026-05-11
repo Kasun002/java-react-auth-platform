@@ -9,7 +9,7 @@ import java.util.Set;
 
 import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.Gender;
-import com.shop.auth.utils.Role;
+import com.shop.auth.utils.Role;        // legacy enum — kept for backward compat JWT claim
 import com.shop.auth.utils.UserStatus;
 
 import jakarta.persistence.CascadeType;
@@ -107,7 +107,7 @@ public class User {
         joinColumns        = @JoinColumn(name = "user_id"),
         inverseJoinColumns = @JoinColumn(name = "role_id")
     )
-    private Set<BankingRole> directRoles = new HashSet<>();
+    private Set<com.shop.auth.entity.Role> directRoles = new HashSet<>();
 
     // ── Azure AD / SSO identity ───────────────────────────────────────────────
 

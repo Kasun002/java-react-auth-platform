@@ -10,7 +10,7 @@ import {
   removePermissionFromRole,
   listGroups,
 } from "../../services/adminService";
-import type { BankingRoleDto, PermissionDto, UserGroupDto } from "../../types/admin";
+import type { RoleDto, PermissionDto, UserGroupDto } from "../../types/admin";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ export default function RoleDetailPage() {
 
   const roleId = Number(id);
 
-  const [role, setRole] = useState<BankingRoleDto | null>(null);
+  const [role, setRole] = useState<RoleDto | null>(null);
   const [allPermissions, setAllPermissions] = useState<PermissionDto[]>([]);
   const [usedByGroups, setUsedByGroups] = useState<UserGroupDto[]>([]);
 

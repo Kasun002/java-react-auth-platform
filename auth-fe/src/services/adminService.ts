@@ -1,6 +1,6 @@
 import api from "../lib/axios";
 import type { ApiResponse, UserDto } from "../types/auth";
-import type { BankingRoleDto, DashboardStatsDto, PageDto, PermissionDto, UserGroupDto } from "../types/admin";
+import type { RoleDto, DashboardStatsDto, PageDto, PermissionDto, UserGroupDto } from "../types/admin";
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -15,13 +15,13 @@ export const listPermissions = () =>
 // ── Roles ─────────────────────────────────────────────────────────────────────
 
 export const listRoles = () =>
-  api.get<ApiResponse<BankingRoleDto[]>>("/admin/roles");
+  api.get<ApiResponse<RoleDto[]>>("/admin/roles");
 
 export const getRole = (id: number) =>
-  api.get<ApiResponse<BankingRoleDto>>(`/admin/roles/${id}`);
+  api.get<ApiResponse<RoleDto>>(`/admin/roles/${id}`);
 
 export const assignPermissionToRole = (roleId: number, permissionId: number) =>
-  api.post<ApiResponse<BankingRoleDto>>(`/admin/roles/${roleId}/permissions`, { permissionId });
+  api.post<ApiResponse<RoleDto>>(`/admin/roles/${roleId}/permissions`, { permissionId });
 
 export const removePermissionFromRole = (roleId: number, permissionId: number) =>
   api.delete<void>(`/admin/roles/${roleId}/permissions/${permissionId}`);
