@@ -17,9 +17,12 @@ import software.amazon.awssdk.services.sqs.SqsClientBuilder;
 /**
  * AWS client beans for SQS and SES.
  *
- * <p>When {@code cloud.aws.endpoint} is set (LocalStack for local dev), both clients
+ * <p>
+ * When {@code cloud.aws.endpoint} is set (LocalStack for local dev), both
+ * clients
  * are pointed at that endpoint. In production, leave the property blank and the
- * SDK resolves the correct regional endpoint automatically.</p>
+ * SDK resolves the correct regional endpoint automatically.
+ * </p>
  */
 @Configuration
 public class AwsConfig {

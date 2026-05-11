@@ -1,14 +1,6 @@
 package com.shop.auth.config;
 
 import java.io.IOException;
-
-import com.shop.auth.dto.ResponseDto;
-import com.shop.auth.filter.JwtAuthenticationFilter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;  // local static instance — not injected
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -34,22 +26,35 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // local static instance — not injected
+import com.shop.auth.dto.ResponseDto;
+import com.shop.auth.filter.JwtAuthenticationFilter;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 
 /**
  * Spring Security configuration.
  *
- * <p>Key decisions:
+ * <p>
+ * Key decisions:
  * <ul>
- *   <li>Stateless sessions — no {@code HttpSession} created (JWT-only).</li>
- *   <li>{@link JwtAuthenticationFilter} runs before {@link UsernamePasswordAuthenticationFilter}.</li>
- *   <li>{@code FilterRegistrationBean} disables servlet auto-registration of the filter
- *       so it executes only inside the Security filter chain (no double-execution).</li>
- *   <li>{@code @EnableMethodSecurity} activates {@code @PreAuthorize} on controllers
- *       and services (Step 3 onward).</li>
- *   <li>401 and 403 responses are JSON {@link ResponseDto} — never Spring's default HTML.</li>
- *   <li>Banking-grade HTTP security headers on every response — HSTS, CSP, no-cache,
- *       no-sniff, no-frame, referrer policy, permissions policy.</li>
+ * <li>Stateless sessions — no {@code HttpSession} created (JWT-only).</li>
+ * <li>{@link JwtAuthenticationFilter} runs before
+ * {@link UsernamePasswordAuthenticationFilter}.</li>
+ * <li>{@code FilterRegistrationBean} disables servlet auto-registration of the
+ * filter
+ * so it executes only inside the Security filter chain (no
+ * double-execution).</li>
+ * <li>{@code @EnableMethodSecurity} activates {@code @PreAuthorize} on
+ * controllers
+ * and services (Step 3 onward).</li>
+ * <li>401 and 403 responses are JSON {@link ResponseDto} — never Spring's
+ * default HTML.</li>
+ * <li>Banking-grade HTTP security headers on every response — HSTS, CSP,
+ * no-cache,
+ * no-sniff, no-frame, referrer policy, permissions policy.</li>
  * </ul>
  * </p>
  */
@@ -61,7 +66,10 @@ public class SecurityConfig {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    /** Comma-separated list of allowed origins — must be explicit in production (no wildcards). */
+    /**
+     * Comma-separated list of allowed origins — must be explicit in production (no
+     * wildcards).
+     */
     @Value("${app.cors.allowed-origins}")
     private List<String> allowedOrigins;
 
@@ -70,54 +78,54 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
-            .formLogin(form -> form.disable())
-            .httpBasic(basic -> basic.disable())
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .headers(headers -> headers
-                .httpStrictTransportSecurity(hsts -> hsts
-                    .maxAgeInSeconds(31_536_000)   // 1 year
-                    .includeSubDomains(true)
-                    .preload(true))
-                .frameOptions(frame -> frame.deny())
-                .contentTypeOptions(Customizer.withDefaults())
-                .cacheControl(Customizer.withDefaults())
-                .contentSecurityPolicy(csp -> csp
-                    .policyDirectives("default-src 'none'; frame-ancestors 'none'"))
-                .referrerPolicy(referrer -> referrer
-                    .policy(ReferrerPolicy.NO_REFERRER))
-                .permissionsPolicyHeader(permissions -> permissions
-                    .policy("camera=(), microphone=(), geolocation=(), payment=()")))
-            .exceptionHandling(ex -> ex
-                .authenticationEntryPoint(jwtAuthenticationEntryPoint())
-                .accessDeniedHandler(jwtAccessDeniedHandler()))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/auth/register",
-                    "/auth/login",
-                    "/auth/ad/login",
-                    "/auth/verify-otp",
-                    "/auth/resend-otp",
-                    "/auth/refresh",
-                    "/auth/forgot-password",
-                    "/auth/reset-password").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
-                .anyRequest().authenticated())
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.disable())
+                .formLogin(form -> form.disable())
+                .httpBasic(basic -> basic.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .headers(headers -> headers
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .maxAgeInSeconds(31_536_000) // 1 year
+                                .includeSubDomains(true)
+                                .preload(true))
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .cacheControl(Customizer.withDefaults())
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives("default-src 'none'; frame-ancestors 'none'"))
+                        .referrerPolicy(referrer -> referrer
+                                .policy(ReferrerPolicy.NO_REFERRER))
+                        .permissionsPolicyHeader(permissions -> permissions
+                                .policy("camera=(), microphone=(), geolocation=(), payment=()")))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint())
+                        .accessDeniedHandler(jwtAccessDeniedHandler()))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/auth/register",
+                                "/auth/login",
+                                "/auth/ad/login",
+                                "/auth/verify-otp",
+                                "/auth/resend-otp",
+                                "/auth/refresh",
+                                "/auth/forgot-password",
+                                "/auth/reset-password")
+                        .permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
     /**
-     * Prevents Spring Boot from also registering the filter as a plain servlet filter,
+     * Prevents Spring Boot from also registering the filter as a plain servlet
+     * filter,
      * which would cause it to execute twice per request.
      */
     @Bean
     FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration() {
-        FilterRegistrationBean<JwtAuthenticationFilter> reg =
-                new FilterRegistrationBean<>(jwtAuthenticationFilter);
+        FilterRegistrationBean<JwtAuthenticationFilter> reg = new FilterRegistrationBean<>(jwtAuthenticationFilter);
         reg.setEnabled(false);
         return reg;
     }
@@ -133,13 +141,16 @@ public class SecurityConfig {
      * Explicit CORS policy — origins are read from {@code app.cors.allowed-origins}
      * so they can be locked down per environment without a code change.
      *
-     * <p>Rules applied:
+     * <p>
+     * Rules applied:
      * <ul>
-     *   <li>Origins — only the configured list; wildcards are never permitted.</li>
-     *   <li>Methods — standard REST verbs plus {@code OPTIONS} for preflight.</li>
-     *   <li>Headers — {@code Authorization} (JWT Bearer) and {@code Content-Type}.</li>
-     *   <li>Credentials — {@code true} so the browser sends the Authorization header.</li>
-     *   <li>Preflight cache — 30 minutes to avoid excess OPTIONS traffic.</li>
+     * <li>Origins — only the configured list; wildcards are never permitted.</li>
+     * <li>Methods — standard REST verbs plus {@code OPTIONS} for preflight.</li>
+     * <li>Headers — {@code Authorization} (JWT Bearer) and
+     * {@code Content-Type}.</li>
+     * <li>Credentials — {@code true} so the browser sends the Authorization
+     * header.</li>
+     * <li>Preflight cache — 30 minutes to avoid excess OPTIONS traffic.</li>
      * </ul>
      * </p>
      */
@@ -167,7 +178,8 @@ public class SecurityConfig {
 
     /**
      * Returns a 401 JSON response when a request reaches a protected endpoint
-     * without a valid token (e.g., no Authorization header, or the filter let it through
+     * without a valid token (e.g., no Authorization header, or the filter let it
+     * through
      * to the security layer without setting an authentication).
      */
     private AuthenticationEntryPoint jwtAuthenticationEntryPoint() {
@@ -178,7 +190,8 @@ public class SecurityConfig {
     }
 
     /**
-     * Returns a 403 JSON response when {@code @PreAuthorize} rejects an authenticated
+     * Returns a 403 JSON response when {@code @PreAuthorize} rejects an
+     * authenticated
      * user who lacks the required authority.
      */
     private AccessDeniedHandler jwtAccessDeniedHandler() {

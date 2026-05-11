@@ -1,6 +1,6 @@
 package com.shop.auth.utils;
 
-public enum LocalStates{
+public enum LocalStates {
     WEST,
     NORTH,
     EAST,

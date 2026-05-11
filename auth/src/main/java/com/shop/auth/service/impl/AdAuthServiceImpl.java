@@ -10,9 +10,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import jakarta.annotation.PostConstruct;
-import jakarta.servlet.http.HttpServletRequest;
-
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -23,8 +20,8 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.shop.auth.config.AdAuthProperties;
-import com.shop.auth.dto.AddressDto;
 import com.shop.auth.dto.AdLoginRequestDto;
+import com.shop.auth.dto.AddressDto;
 import com.shop.auth.dto.LoginResponseDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.entity.User;
@@ -40,10 +37,11 @@ import com.shop.auth.service.JwtService;
 import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
 import com.shop.auth.utils.UserStatus;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -53,13 +51,16 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <h3>Login flow</h3>
  * <ol>
- *   <li>Check {@code app.ad.enabled} — reject with 503 if disabled.</li>
- *   <li>Decode and validate the ID token signature via JWKS, verify iss + aud.</li>
- *   <li>Extract {@code oid} claim as the AD object ID; fall back to {@code sub}.</li>
- *   <li>Find or provision the local User record.</li>
- *   <li>Fetch LDAP groups; resolve to local UserGroups via AdGroupMappingService.</li>
- *   <li>Replace the user's current group memberships with the resolved set.</li>
- *   <li>Issue JWT pair; persist audit log; return LoginResponseDto.</li>
+ * <li>Check {@code app.ad.enabled} — reject with 503 if disabled.</li>
+ * <li>Decode and validate the ID token signature via JWKS, verify iss +
+ * aud.</li>
+ * <li>Extract {@code oid} claim as the AD object ID; fall back to
+ * {@code sub}.</li>
+ * <li>Find or provision the local User record.</li>
+ * <li>Fetch LDAP groups; resolve to local UserGroups via
+ * AdGroupMappingService.</li>
+ * <li>Replace the user's current group memberships with the resolved set.</li>
+ * <li>Issue JWT pair; persist audit log; return LoginResponseDto.</li>
  * </ol>
  */
 @Slf4j
@@ -67,11 +68,11 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AdAuthServiceImpl implements AdAuthService {
 
-    private final AdAuthProperties      props;
-    private final UserRepository        userRepository;
-    private final UserLogRepository     userLogRepository;
-    private final JwtService            jwtService;
-    private final AdLdapGroupService    ldapGroupService;
+    private final AdAuthProperties props;
+    private final UserRepository userRepository;
+    private final UserLogRepository userLogRepository;
+    private final JwtService jwtService;
+    private final AdLdapGroupService ldapGroupService;
     private final AdGroupMappingService groupMappingService;
 
     /** Built lazily in {@code @PostConstruct} when AD is enabled. */
@@ -109,10 +110,10 @@ public class AdAuthServiceImpl implements AdAuthService {
 
         // Step 2: extract identity claims
         String adObjectId = extractAdObjectId(jwt);
-        String email      = jwt.getClaimAsString("email");
-        String upn        = jwt.getClaimAsString("upn");           // Azure AD UPN
-        String preferred  = jwt.getClaimAsString("preferred_username"); // Keycloak
-        String name       = jwt.getClaimAsString("name");
+        String email = jwt.getClaimAsString("email");
+        String upn = jwt.getClaimAsString("upn"); // Azure AD UPN
+        String preferred = jwt.getClaimAsString("preferred_username"); // Keycloak
+        String name = jwt.getClaimAsString("name");
 
         String userEmail = firstNonBlank(email, upn, preferred);
         if (userEmail == null) {
@@ -139,10 +140,10 @@ public class AdAuthServiceImpl implements AdAuthService {
         userRepository.save(user);
 
         // Step 7: issue JWT pair
-        String accessToken  = jwtService.generateAccessToken(user);
+        String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
-        persistUserLog(user, accessToken,  TokenType.ACCESS);
+        persistUserLog(user, accessToken, TokenType.ACCESS);
         persistUserLog(user, refreshToken, TokenType.REFRESH);
 
         log.info("AD login successful — email=[{}]", MaskingUtil.maskEmail(userEmail));
@@ -196,7 +197,8 @@ public class AdAuthServiceImpl implements AdAuthService {
     }
 
     /**
-     * Finds an existing user by AD Object ID, or by email (handles re-provisioning),
+     * Finds an existing user by AD Object ID, or by email (handles
+     * re-provisioning),
      * or creates a brand-new user for first-time AD login.
      */
     private User findOrProvisionUser(String adObjectId, String email, String displayName) {
@@ -231,7 +233,6 @@ public class AdAuthServiceImpl implements AdAuthService {
         user.setAdObjectId(adObjectId);
         user.setAuthProvider(AuthProvider.AZURE_AD);
         user.setStatus(UserStatus.ACTIVE);
-        user.setRole(Role.USER);
         // Random unguessable password — local login is blocked for AZURE_AD users
         user.setPassword("$AD$" + UUID.randomUUID());
         user.setPasswordChangedAt(LocalDateTime.now()); // no password age enforcement for AD users; column is NOT NULL
@@ -283,11 +284,9 @@ public class AdAuthServiceImpl implements AdAuthService {
         user.getDirectRoles().forEach(r -> roleNames.add(r.getName()));
 
         Set<String> permCodes = new LinkedHashSet<>();
-        user.getGroups().forEach(g ->
-                g.getRoles().forEach(r ->
-                        r.getPermissions().forEach(p -> permCodes.add(p.getCode()))));
-        user.getDirectRoles().forEach(r ->
-                r.getPermissions().forEach(p -> permCodes.add(p.getCode())));
+        user.getGroups()
+                .forEach(g -> g.getRoles().forEach(r -> r.getPermissions().forEach(p -> permCodes.add(p.getCode()))));
+        user.getDirectRoles().forEach(r -> r.getPermissions().forEach(p -> permCodes.add(p.getCode())));
 
         UserDto dto = new UserDto();
         dto.setId(user.getId());
@@ -295,7 +294,6 @@ public class AdAuthServiceImpl implements AdAuthService {
         dto.setEmail(user.getEmail());
         dto.setPhone(user.getPhone());
         dto.setStatus(user.getStatus());
-        dto.setRole(user.getRole());
         dto.setAuthProvider(user.getAuthProvider());
         dto.setDateOfBirth(user.getDateOfBirth());
         dto.setGender(user.getGender());
@@ -329,7 +327,8 @@ public class AdAuthServiceImpl implements AdAuthService {
 
     private String extractClientIp() {
         HttpServletRequest request = currentRequest();
-        if (request == null) return null;
+        if (request == null)
+            return null;
         String forwarded = request.getHeader("X-Forwarded-For");
         return (forwarded != null && !forwarded.isBlank())
                 ? forwarded.split(",")[0].trim()
@@ -343,8 +342,7 @@ public class AdAuthServiceImpl implements AdAuthService {
 
     private HttpServletRequest currentRequest() {
         try {
-            return ((ServletRequestAttributes)
-                    RequestContextHolder.currentRequestAttributes()).getRequest();
+            return ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         } catch (IllegalStateException e) {
             return null;
         }
@@ -352,7 +350,8 @@ public class AdAuthServiceImpl implements AdAuthService {
 
     private String firstNonBlank(String... values) {
         for (String v : values) {
-            if (v != null && !v.isBlank()) return v;
+            if (v != null && !v.isBlank())
+                return v;
         }
         return null;
     }

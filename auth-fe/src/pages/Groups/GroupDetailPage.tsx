@@ -21,36 +21,124 @@ import {
   listRoles,
   assignRoleToGroup,
   removeRoleFromGroup,
+  updateGroup,
 } from "../../services/adminService";
-import type { BankingRoleDto, UserGroupDto } from "../../types/admin";
-import { USERS } from "../../temp_data/rbacData";
+import type { RoleDto, UserGroupDto, UpdateGroupRequest } from "../../types/admin";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TYPE_COLOR: Record<string, "primary" | "success" | "warning" | "error" | "light"> = {
+type BadgeColor = "primary" | "success" | "warning" | "error" | "light";
+
+const PRESET_TYPE_COLORS: Record<string, BadgeColor> = {
   CUSTOMER: "primary",
   STAFF: "success",
   OVERSIGHT: "warning",
   ADMIN: "error",
 };
 
-const STATUS_COLOR: Record<string, "success" | "error" | "warning" | "light"> = {
-  ACTIVE: "success",
-  INACTIVE: "light",
-  SUSPENDED: "error",
-};
-
-function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+function typeColor(type: string): BadgeColor {
+  return PRESET_TYPE_COLORS[type.toUpperCase()] ?? "light";
 }
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function apiError(err: unknown): string {
+  const e = err as { response?: { data?: { message?: string } } };
+  return e?.response?.data?.message ?? "An unexpected error occurred";
+}
+
+// ── Edit Group Modal ──────────────────────────────────────────────────────────
+
+interface EditGroupModalProps {
+  group: UserGroupDto;
+  onClose: () => void;
+  onSaved: (g: UserGroupDto) => void;
+}
+
+function EditGroupModal({ group, onClose, onSaved }: EditGroupModalProps) {
+  const [name, setName] = useState(group.name);
+  const [type, setType] = useState(group.type);
+  const [description, setDescription] = useState(group.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const req: UpdateGroupRequest = { name, type, description };
+      const res = await updateGroup(group.id, req);
+      onSaved(res.data.data!);
+      onClose();
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">Edit group</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+              {error}
+            </div>
+          )}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Name <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Type <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 type TabId = "overview" | "roles" | "permissions" | "members";
@@ -70,7 +158,7 @@ function AssignRoleModal({
   onClose,
   onAssigned,
 }: AssignRoleModalProps) {
-  const [availableRoles, setAvailableRoles] = useState<BankingRoleDto[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<RoleDto[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +282,7 @@ export default function GroupDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [assignOpen, setAssignOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const groupId = Number(id);
 
@@ -265,16 +354,13 @@ export default function GroupDetailPage() {
     {}
   );
 
-  // Members from temp data matched by group name
-  const members = USERS.filter((u) => u.groups.includes(group.name));
-
   const currentRoleIds = group.roles.map((r) => r.id);
 
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "roles", label: "Roles", count: group.roles.length },
     { id: "permissions", label: "Permissions", count: allPermissions.length },
-    { id: "members", label: "Members", count: members.length },
+    { id: "members", label: "Members" },
   ];
 
   return (
@@ -307,7 +393,7 @@ export default function GroupDetailPage() {
               <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">
                 {group.name}
               </h1>
-              <Badge color={TYPE_COLOR[group.type] ?? "light"} size="sm">
+              <Badge color={typeColor(group.type)} size="sm">
                 {group.type}
               </Badge>
             </div>
@@ -315,8 +401,6 @@ export default function GroupDetailPage() {
               {group.description}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
-              <span>{members.length} member{members.length !== 1 ? "s" : ""}</span>
-              <span>&middot;</span>
               <span>{group.roles.length} role{group.roles.length !== 1 ? "s" : ""}</span>
               <span>&middot;</span>
               <span>{allPermissions.length} effective permissions</span>
@@ -325,7 +409,10 @@ export default function GroupDetailPage() {
 
           {/* Actions */}
           <div className="flex flex-wrap gap-2 shrink-0">
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors">
+            <button
+              onClick={() => setEditOpen(true)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors"
+            >
               Edit
             </button>
             <button
@@ -598,71 +685,25 @@ export default function GroupDetailPage() {
         {activeTab === "members" && (
           <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
             <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                Members
-              </h3>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">Members</h3>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                {members.length} user{members.length !== 1 ? "s" : ""} in this group
+                Users assigned to this group
               </p>
             </div>
-            {members.length === 0 ? (
-              <div className="flex flex-col items-center py-12 text-gray-400">
-                <UserCircleIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
-                <p className="text-sm">No members in this group</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
-                    {["User", "Status", "Department", "Last Login"].map((h) => (
-                      <TableCell
-                        key={h}
-                        isHeader
-                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                      >
-                        {h}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {members.map((u) => (
-                    <TableRow
-                      key={u.id}
-                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer transition-colors"
-                      onClick={() => navigate(`/users/${u.id}`)}
-                    >
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400 text-xs font-semibold">
-                            {getInitials(u.name)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">
-                              {u.name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                              {u.email}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-6 py-3">
-                        <Badge color={STATUS_COLOR[u.status] ?? "light"} size="sm">
-                          {u.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {u.department}
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400">
-                        {formatDate(u.lastLoginAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <div className="flex flex-col items-center py-14 text-gray-400 dark:text-gray-500">
+              <UserCircleIcon className="size-10 mb-3 text-gray-300 dark:text-gray-700" />
+              <p className="text-sm font-medium">Members list coming soon</p>
+              <p className="mt-1 text-xs text-center max-w-xs">
+                View and manage group members from the{" "}
+                <button
+                  onClick={() => navigate("/users")}
+                  className="text-brand-500 hover:text-brand-600 underline"
+                >
+                  Users page
+                </button>
+                .
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -674,6 +715,15 @@ export default function GroupDetailPage() {
           currentRoleIds={currentRoleIds}
           onClose={() => setAssignOpen(false)}
           onAssigned={fetchGroup}
+        />
+      )}
+
+      {/* Edit group modal */}
+      {editOpen && group && (
+        <EditGroupModal
+          group={group}
+          onClose={() => setEditOpen(false)}
+          onSaved={(updated) => setGroup(updated)}
         />
       )}
     </>

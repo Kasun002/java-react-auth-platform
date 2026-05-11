@@ -3,7 +3,6 @@ package com.shop.auth.dto;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.shop.auth.utils.Role;
 import com.shop.auth.validation.StrongPassword;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -33,11 +32,7 @@ public class RegisterRequestDto {
     @Size(max = 50, message = "Phone number must be at most 50 characters")
     private String phone;
 
-    @Schema(
-        description = "Password — min 12 chars, must include uppercase, lowercase, digit, and special character (PCI-DSS 8.3.6)",
-        example = "Secure@Pass1!",
-        requiredMode = Schema.RequiredMode.REQUIRED
-    )
+    @Schema(description = "Password — min 12 chars, must include uppercase, lowercase, digit, and special character (PCI-DSS 8.3.6)", example = "Secure@Pass1!", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "Password is required")
     @StrongPassword
     private String password;
@@ -48,6 +43,4 @@ public class RegisterRequestDto {
     @Size(min = 1, message = "At least one address is required")
     private List<AddressDto> addresses = new ArrayList<>();
 
-    @Schema(description = "User role — defaults to USER if omitted", example = "USER")
-    private Role role;
 }

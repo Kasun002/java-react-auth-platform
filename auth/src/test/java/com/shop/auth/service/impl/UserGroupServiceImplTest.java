@@ -6,12 +6,12 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.shop.auth.dto.UserGroupDto;
-import com.shop.auth.entity.BankingRole;
 import com.shop.auth.entity.Permission;
+import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
 import com.shop.auth.exception.ResourceNotFoundException;
-import com.shop.auth.repository.BankingRoleRepository;
+import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
 
@@ -38,34 +38,34 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 class UserGroupServiceImplTest {
 
-    @Mock private UserGroupRepository   userGroupRepository;
-    @Mock private BankingRoleRepository bankingRoleRepository;
-    @Mock private UserRepository        userRepository;
+    @Mock private UserGroupRepository userGroupRepository;
+    @Mock private RoleRepository      roleRepository;
+    @Mock private UserRepository      userRepository;
 
     @InjectMocks private UserGroupServiceImpl service;
 
-    private UserGroup retailGroup;
-    private BankingRole basicRole;
-    private Permission  accountView;
-    private User        activeUser;
+    private UserGroup adminGroup;
+    private Role      managerRole;
+    private Permission userView;
+    private User      activeUser;
 
     @BeforeEach
     void setUp() {
-        accountView = new Permission();
-        accountView.setId(1L);
-        accountView.setCode("ACCOUNT_VIEW");
-        accountView.setCategory("ACCOUNT");
+        userView = new Permission();
+        userView.setId(1L);
+        userView.setCode("USER_VIEW");
+        userView.setCategory("USER");
 
-        basicRole = new BankingRole();
-        basicRole.setId(5L);
-        basicRole.setName("ROLE_CUSTOMER_BASIC");
-        basicRole.setPermissions(new HashSet<>(Set.of(accountView)));
+        managerRole = new Role();
+        managerRole.setId(5L);
+        managerRole.setName("ROLE_MANAGER");
+        managerRole.setPermissions(new HashSet<>(Set.of(userView)));
 
-        retailGroup = new UserGroup();
-        retailGroup.setId(1L);
-        retailGroup.setName("RETAIL_CUSTOMER");
-        retailGroup.setType("CUSTOMER");
-        retailGroup.setRoles(new HashSet<>(Set.of(basicRole)));
+        adminGroup = new UserGroup();
+        adminGroup.setId(1L);
+        adminGroup.setName("SYSTEM_ADMIN");
+        adminGroup.setType("ADMIN");
+        adminGroup.setRoles(new HashSet<>(Set.of(managerRole)));
 
         activeUser = new User();
         activeUser.setId(42L);
@@ -84,14 +84,14 @@ class UserGroupServiceImplTest {
         @Test
         @DisplayName("Returns mapped DTOs including nested roles and permissions")
         void shouldReturnMappedDtos() {
-            when(userGroupRepository.findAll()).thenReturn(List.of(retailGroup));
+            when(userGroupRepository.findAll()).thenReturn(List.of(adminGroup));
 
             List<UserGroupDto> result = service.listAll();
 
             assertThat(result).hasSize(1);
-            assertThat(result.get(0).getName()).isEqualTo("RETAIL_CUSTOMER");
+            assertThat(result.get(0).getName()).isEqualTo("SYSTEM_ADMIN");
             assertThat(result.get(0).getRoles()).hasSize(1);
-            assertThat(result.get(0).getRoles().get(0).getName()).isEqualTo("ROLE_CUSTOMER_BASIC");
+            assertThat(result.get(0).getRoles().get(0).getName()).isEqualTo("ROLE_MANAGER");
             assertThat(result.get(0).getRoles().get(0).getPermissions()).hasSize(1);
         }
 
@@ -112,12 +112,12 @@ class UserGroupServiceImplTest {
         @Test
         @DisplayName("Returns DTO when group exists")
         void shouldReturnDto() {
-            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(retailGroup));
+            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(adminGroup));
 
             UserGroupDto result = service.getById(1L);
 
             assertThat(result.getId()).isEqualTo(1L);
-            assertThat(result.getName()).isEqualTo("RETAIL_CUSTOMER");
+            assertThat(result.getName()).isEqualTo("SYSTEM_ADMIN");
         }
 
         @Test
@@ -140,29 +140,29 @@ class UserGroupServiceImplTest {
         @Test
         @DisplayName("Adds role to group when not already assigned")
         void shouldAddRole() {
-            BankingRole newRole = new BankingRole();
+            Role newRole = new Role();
             newRole.setId(9L);
-            newRole.setName("ROLE_LOAN_PROCESSOR");
+            newRole.setName("ROLE_VIEWER");
             newRole.setPermissions(new HashSet<>());
-            retailGroup.setRoles(new HashSet<>());
+            adminGroup.setRoles(new HashSet<>());
 
-            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(retailGroup));
-            when(bankingRoleRepository.findById(9L)).thenReturn(Optional.of(newRole));
+            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(adminGroup));
+            when(roleRepository.findById(9L)).thenReturn(Optional.of(newRole));
             when(userGroupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             UserGroupDto result = service.assignRoleToGroup(1L, 9L);
 
             assertThat(result.getRoles()).hasSize(1);
-            verify(userGroupRepository).save(retailGroup);
+            verify(userGroupRepository).save(adminGroup);
         }
 
         @Test
         @DisplayName("Is idempotent — no save when role already assigned")
         void shouldBeIdempotent() {
-            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(retailGroup));
-            when(bankingRoleRepository.findById(5L)).thenReturn(Optional.of(basicRole));
+            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(adminGroup));
+            when(roleRepository.findById(5L)).thenReturn(Optional.of(managerRole));
 
-            service.assignRoleToGroup(1L, 5L);  // basicRole already in retailGroup
+            service.assignRoleToGroup(1L, 5L);  // managerRole already in adminGroup
 
             verify(userGroupRepository, never()).save(any());
         }
@@ -185,13 +185,13 @@ class UserGroupServiceImplTest {
         @Test
         @DisplayName("Returns user's group list")
         void shouldReturnUserGroups() {
-            activeUser.getGroups().add(retailGroup);
+            activeUser.getGroups().add(adminGroup);
             when(userRepository.findById(42L)).thenReturn(Optional.of(activeUser));
 
             List<UserGroupDto> result = service.getUserGroups(42L);
 
             assertThat(result).hasSize(1);
-            assertThat(result.get(0).getName()).isEqualTo("RETAIL_CUSTOMER");
+            assertThat(result.get(0).getName()).isEqualTo("SYSTEM_ADMIN");
         }
 
         @Test
@@ -220,21 +220,21 @@ class UserGroupServiceImplTest {
         @DisplayName("Adds user to group and saves")
         void shouldAddUserToGroup() {
             when(userRepository.findById(42L)).thenReturn(Optional.of(activeUser));
-            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(retailGroup));
+            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(adminGroup));
             when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             service.addUserToGroup(42L, 1L);
 
-            assertThat(activeUser.getGroups()).contains(retailGroup);
+            assertThat(activeUser.getGroups()).contains(adminGroup);
             verify(userRepository).save(activeUser);
         }
 
         @Test
         @DisplayName("Is idempotent — no save when user already in group")
         void shouldBeIdempotent() {
-            activeUser.getGroups().add(retailGroup);
+            activeUser.getGroups().add(adminGroup);
             when(userRepository.findById(42L)).thenReturn(Optional.of(activeUser));
-            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(retailGroup));
+            when(userGroupRepository.findById(1L)).thenReturn(Optional.of(adminGroup));
 
             service.addUserToGroup(42L, 1L);
 
@@ -259,48 +259,47 @@ class UserGroupServiceImplTest {
         @Test
         @DisplayName("Returns permissions from group-assigned roles")
         void shouldReturnGroupPermissions() {
-            activeUser.getGroups().add(retailGroup);  // retailGroup → basicRole → ACCOUNT_VIEW
+            activeUser.getGroups().add(adminGroup);  // adminGroup → managerRole → USER_VIEW
             when(userRepository.findById(42L)).thenReturn(Optional.of(activeUser));
 
             Set<String> result = service.getEffectivePermissions(42L);
 
-            assertThat(result).containsExactly("ACCOUNT_VIEW");
+            assertThat(result).containsExactly("USER_VIEW");
         }
 
         @Test
         @DisplayName("Returns permissions from direct role assignments")
         void shouldReturnDirectRolePermissions() {
-            Permission txnView = new Permission();
-            txnView.setId(2L);
-            txnView.setCode("TRANSACTION_VIEW");
-            BankingRole directRole = new BankingRole();
+            Permission groupManage = new Permission();
+            groupManage.setId(2L);
+            groupManage.setCode("GROUP_MANAGE");
+            Role directRole = new Role();
             directRole.setId(8L);
-            directRole.setPermissions(new HashSet<>(Set.of(txnView)));
+            directRole.setPermissions(new HashSet<>(Set.of(groupManage)));
             activeUser.getDirectRoles().add(directRole);
 
             when(userRepository.findById(42L)).thenReturn(Optional.of(activeUser));
 
             Set<String> result = service.getEffectivePermissions(42L);
 
-            assertThat(result).containsExactly("TRANSACTION_VIEW");
+            assertThat(result).containsExactly("GROUP_MANAGE");
         }
 
         @Test
         @DisplayName("Returns union of group and direct-role permissions without duplicates")
         void shouldReturnUnionWithoutDuplicates() {
-            // Both group and direct role have ACCOUNT_VIEW — should appear once
-            activeUser.getGroups().add(retailGroup);
+            activeUser.getGroups().add(adminGroup);
 
-            BankingRole directRole = new BankingRole();
+            Role directRole = new Role();
             directRole.setId(8L);
-            directRole.setPermissions(new HashSet<>(Set.of(accountView))); // same permission
+            directRole.setPermissions(new HashSet<>(Set.of(userView))); // same permission
             activeUser.getDirectRoles().add(directRole);
 
             when(userRepository.findById(42L)).thenReturn(Optional.of(activeUser));
 
             Set<String> result = service.getEffectivePermissions(42L);
 
-            assertThat(result).hasSize(1).containsExactly("ACCOUNT_VIEW");
+            assertThat(result).hasSize(1).containsExactly("USER_VIEW");
         }
 
         @Test

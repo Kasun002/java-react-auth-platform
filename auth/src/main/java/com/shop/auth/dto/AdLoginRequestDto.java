@@ -7,7 +7,8 @@ import lombok.Data;
 /**
  * Request body for POST /auth/ad/login.
  *
- * <p>The client (SPA or mobile app) obtains an OIDC ID token from Azure AD
+ * <p>
+ * The client (SPA or mobile app) obtains an OIDC ID token from Azure AD
  * (or Keycloak in dev) using MSAL / OAuth2 PKCE flow, then exchanges it here
  * for this service's own JWT pair.
  */
@@ -16,10 +17,7 @@ import lombok.Data;
 public class AdLoginRequestDto {
 
     @NotBlank
-    @Schema(
-        description = "OIDC ID token issued by Azure AD (or Keycloak in dev). " +
-                      "Obtained by the client via MSAL / OAuth2 PKCE flow.",
-        example = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-    )
+    @Schema(description = "OIDC ID token issued by Azure AD (or Keycloak in dev). " +
+            "Obtained by the client via MSAL / OAuth2 PKCE flow.", example = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...")
     private String idToken;
 }

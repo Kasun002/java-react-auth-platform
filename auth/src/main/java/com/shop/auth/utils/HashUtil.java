@@ -6,7 +6,8 @@ import java.security.NoSuchAlgorithmException;
 
 public final class HashUtil {
 
-    private HashUtil() {}
+    private HashUtil() {
+    }
 
     /**
      * Returns the lowercase hex-encoded SHA-256 digest of the given input.

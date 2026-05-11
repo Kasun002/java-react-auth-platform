@@ -10,20 +10,23 @@ import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 
 /**
- * Enforces banking-grade password complexity (NIST 800-63B + PCI-DSS Req 8.3.6):
+ * Enforces banking-grade password complexity (NIST 800-63B + PCI-DSS Req
+ * 8.3.6):
  * <ul>
- *   <li>12–128 characters</li>
- *   <li>At least one uppercase letter</li>
- *   <li>At least one lowercase letter</li>
- *   <li>At least one digit</li>
- *   <li>At least one special character</li>
+ * <li>12–128 characters</li>
+ * <li>At least one uppercase letter</li>
+ * <li>At least one lowercase letter</li>
+ * <li>At least one digit</li>
+ * <li>At least one special character</li>
  * </ul>
  *
- * <p>Null values pass — pair with {@code @NotBlank} to reject null/empty.</p>
+ * <p>
+ * Null values pass — pair with {@code @NotBlank} to reject null/empty.
+ * </p>
  */
 @Documented
 @Constraint(validatedBy = StrongPasswordValidator.class)
-@Target({ElementType.FIELD, ElementType.PARAMETER})
+@Target({ ElementType.FIELD, ElementType.PARAMETER })
 @Retention(RetentionPolicy.RUNTIME)
 public @interface StrongPassword {
 

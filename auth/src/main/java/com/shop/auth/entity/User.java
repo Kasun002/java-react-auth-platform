@@ -7,9 +7,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.Gender;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 
 import jakarta.persistence.CascadeType;
@@ -30,8 +32,6 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 @Data
 @Entity
@@ -58,22 +58,13 @@ public class User {
     @NotBlank
     private String password;
 
-    @OneToMany(
-        mappedBy = "user",
-        cascade = CascadeType.ALL,
-        orphanRemoval = true,
-        fetch = FetchType.LAZY
-    )
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Address> addresses = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @NotNull
     private UserStatus status;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = true)
-    private Role role;
 
     // ── Optional profile fields ───────────────────────────────────────────────
 
@@ -94,25 +85,17 @@ public class User {
     // ── RBAC — groups and direct role assignments ─────────────────────────────
 
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "user_group_memberships",
-        joinColumns        = @JoinColumn(name = "user_id"),
-        inverseJoinColumns = @JoinColumn(name = "group_id")
-    )
+    @JoinTable(name = "user_group_memberships", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "group_id"))
     private Set<UserGroup> groups = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "user_role_assignments",
-        joinColumns        = @JoinColumn(name = "user_id"),
-        inverseJoinColumns = @JoinColumn(name = "role_id")
-    )
-    private Set<BankingRole> directRoles = new HashSet<>();
+    @JoinTable(name = "user_role_assignments", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
+    private Set<com.shop.auth.entity.Role> directRoles = new HashSet<>();
 
     // ── Azure AD / SSO identity ───────────────────────────────────────────────
 
     /**
-     * Azure AD Object ID ("oid" claim).  Null for LOCAL users.
+     * Azure AD Object ID ("oid" claim). Null for LOCAL users.
      * Partial unique index in DB (WHERE ad_object_id IS NOT NULL).
      */
     @Column(nullable = true, length = 255)

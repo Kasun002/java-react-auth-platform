@@ -10,17 +10,19 @@ import jakarta.validation.ConstraintValidatorContext;
 /**
  * Validates password complexity per NIST 800-63B and PCI-DSS Req 8.3.6.
  *
- * <p>All failing rules are collected and reported in a single message so the
- * caller knows exactly what to fix without round-tripping multiple times.</p>
+ * <p>
+ * All failing rules are collected and reported in a single message so the
+ * caller knows exactly what to fix without round-tripping multiple times.
+ * </p>
  */
 public class StrongPasswordValidator implements ConstraintValidator<StrongPassword, String> {
 
-    private static final int     MIN_LENGTH   = 12;
-    private static final int     MAX_LENGTH   = 128;
-    private static final Pattern HAS_UPPER    = Pattern.compile("[A-Z]");
-    private static final Pattern HAS_LOWER    = Pattern.compile("[a-z]");
-    private static final Pattern HAS_DIGIT    = Pattern.compile("\\d");
-    private static final Pattern HAS_SPECIAL  = Pattern.compile("[!@#$%^&*()_+\\-=\\[\\]{}|;':\",./<>?~`]");
+    private static final int MIN_LENGTH = 12;
+    private static final int MAX_LENGTH = 128;
+    private static final Pattern HAS_UPPER = Pattern.compile("[A-Z]");
+    private static final Pattern HAS_LOWER = Pattern.compile("[a-z]");
+    private static final Pattern HAS_DIGIT = Pattern.compile("\\d");
+    private static final Pattern HAS_SPECIAL = Pattern.compile("[!@#$%^&*()_+\\-=\\[\\]{}|;':\",./<>?~`]");
 
     @Override
     public boolean isValid(String value, ConstraintValidatorContext ctx) {
@@ -56,7 +58,7 @@ public class StrongPasswordValidator implements ConstraintValidator<StrongPasswo
         ctx.disableDefaultConstraintViolation();
         ctx.buildConstraintViolationWithTemplate(
                 "Password must contain: " + String.join(", ", violations))
-           .addConstraintViolation();
+                .addConstraintViolation();
         return false;
     }
 }

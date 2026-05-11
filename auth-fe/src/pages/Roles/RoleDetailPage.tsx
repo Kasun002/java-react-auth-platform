@@ -2,24 +2,132 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import PageMeta from "../../components/common/PageMeta";
 import Badge from "../../components/ui/badge/Badge";
-import { ChevronLeftIcon, LockIcon, BoltIcon, GroupIcon } from "../../icons";
+import { BoltIcon, ChevronLeftIcon, GroupIcon, LockIcon } from "../../icons";
 import {
-  getRole,
-  listPermissions,
   assignPermissionToRole,
-  removePermissionFromRole,
+  deleteRole,
+  getRole,
   listGroups,
+  listPermissions,
+  removePermissionFromRole,
+  updateRole,
 } from "../../services/adminService";
-import type { BankingRoleDto, PermissionDto, UserGroupDto } from "../../types/admin";
+import type {
+  PermissionDto,
+  RoleDto,
+  UpdateRoleRequest,
+  UserGroupDto,
+} from "../../types/admin";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TYPE_COLOR: Record<string, "primary" | "success" | "warning" | "error" | "light"> = {
+const TYPE_COLOR: Record<
+  string,
+  "primary" | "success" | "warning" | "error" | "light"
+> = {
   CUSTOMER: "primary",
   STAFF: "success",
   OVERSIGHT: "warning",
   ADMIN: "error",
 };
+
+function apiError(err: unknown): string {
+  const e = err as { response?: { data?: { message?: string } } };
+  return e?.response?.data?.message ?? "An unexpected error occurred";
+}
+
+// ── Edit Role Modal ───────────────────────────────────────────────────────────
+
+interface EditRoleModalProps {
+  role: RoleDto;
+  onClose: () => void;
+  onSaved: (r: RoleDto) => void;
+}
+
+function EditRoleModal({ role, onClose, onSaved }: EditRoleModalProps) {
+  const [name, setName] = useState(role.name);
+  const [description, setDescription] = useState(role.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const req: UpdateRoleRequest = { name, description };
+      const res = await updateRole(role.id, req);
+      onSaved(res.data.data!);
+      onClose();
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            Edit role
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            ✕
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+              {error}
+            </div>
+          )}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Name <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Description
+            </label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -29,7 +137,7 @@ export default function RoleDetailPage() {
 
   const roleId = Number(id);
 
-  const [role, setRole] = useState<BankingRoleDto | null>(null);
+  const [role, setRole] = useState<RoleDto | null>(null);
   const [allPermissions, setAllPermissions] = useState<PermissionDto[]>([]);
   const [usedByGroups, setUsedByGroups] = useState<UserGroupDto[]>([]);
 
@@ -38,6 +146,9 @@ export default function RoleDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Local grant set — tracks unsaved changes
   const [grantedIds, setGrantedIds] = useState<Set<number>>(new Set());
@@ -49,17 +160,16 @@ export default function RoleDetailPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([
-      getRole(roleId),
-      listPermissions(),
-      listGroups(),
-    ])
+    Promise.all([getRole(roleId), listPermissions(), listGroups()])
       .then(([roleRes, permsRes, groupsRes]) => {
         const r = roleRes.data.data;
         const perms = permsRes.data.data ?? [];
         const groups = groupsRes.data.data ?? [];
 
-        if (!r) { setError("Role not found."); return; }
+        if (!r) {
+          setError("Role not found.");
+          return;
+        }
 
         setRole(r);
         setAllPermissions(perms);
@@ -69,7 +179,9 @@ export default function RoleDetailPage() {
         setOriginalIds(new Set(currentIds));
 
         // Groups that have this role assigned
-        setUsedByGroups(groups.filter((g) => g.roles.some((gr) => gr.id === roleId)));
+        setUsedByGroups(
+          groups.filter((g) => g.roles.some((gr) => gr.id === roleId))
+        );
       })
       .catch(() => setError("Failed to load role."))
       .finally(() => setLoading(false));
@@ -129,6 +241,21 @@ export default function RoleDetailPage() {
     setSaveSuccess(false);
   }
 
+  async function handleDelete() {
+    if (!role) return;
+    if (!window.confirm(`Delete role "${role.name}"? This cannot be undone.`))
+      return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteRole(roleId);
+      navigate("/roles");
+    } catch (err) {
+      setDeleteError(apiError(err));
+      setDeleting(false);
+    }
+  }
+
   const hasChanges =
     grantedIds.size !== originalIds.size ||
     [...grantedIds].some((id) => !originalIds.has(id));
@@ -182,6 +309,19 @@ export default function RoleDetailPage() {
         Roles
       </button>
 
+      {/* ── Delete error ── */}
+      {deleteError && (
+        <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+          {deleteError}
+          <button
+            onClick={() => setDeleteError(null)}
+            className="ml-3 text-xs underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* ── Role header ── */}
       <div className="mb-4 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] px-6 py-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -205,18 +345,24 @@ export default function RoleDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors">
+            <button
+              onClick={() => setEditOpen(true)}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors"
+            >
               Edit
             </button>
-            <button className="rounded-lg border border-error-200 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors">
-              Delete
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="rounded-lg border border-error-200 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {deleting ? "Deleting…" : "Delete"}
             </button>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-
         {/* ── Permissions matrix ── */}
         <div className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
@@ -261,7 +407,9 @@ export default function RoleDetailPage() {
 
           <div className="p-5 space-y-3">
             {Object.entries(byCategory).map(([category, perms]) => {
-              const grantedCount = perms.filter((p) => grantedIds.has(p.id)).length;
+              const grantedCount = perms.filter((p) =>
+                grantedIds.has(p.id)
+              ).length;
               const allGranted = grantedCount === perms.length;
 
               return (
@@ -272,7 +420,9 @@ export default function RoleDetailPage() {
                   {/* Category header */}
                   <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-white/[0.02] px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <Badge color="light" size="sm">{category}</Badge>
+                      <Badge color="light" size="sm">
+                        {category}
+                      </Badge>
                       <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                         {grantedCount} / {perms.length}
                       </span>
@@ -364,6 +514,15 @@ export default function RoleDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ── Edit modal ── */}
+      {editOpen && role && (
+        <EditRoleModal
+          role={role}
+          onClose={() => setEditOpen(false)}
+          onSaved={(updated) => setRole(updated)}
+        />
+      )}
     </>
   );
 }

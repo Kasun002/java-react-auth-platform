@@ -18,12 +18,12 @@ import lombok.extern.slf4j.Slf4j;
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
     private static final String CORRELATION_ID_HEADER = "X-Correlation-ID";
-    private static final String MDC_CORRELATION_ID   = "correlationId";
+    private static final String MDC_CORRELATION_ID = "correlationId";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
 
         String correlationId = request.getHeader(CORRELATION_ID_HEADER);
         if (correlationId == null || correlationId.isBlank()) {

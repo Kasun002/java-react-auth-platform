@@ -28,9 +28,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AdGroupMappingServiceImpl implements AdGroupMappingService {
 
-    private final AdAuthProperties          props;
-    private final AdGroupMappingRepository  adGroupMappingRepository;
-    private final UserGroupRepository       userGroupRepository;
+    private final AdAuthProperties props;
+    private final AdGroupMappingRepository adGroupMappingRepository;
+    private final UserGroupRepository userGroupRepository;
 
     // ── Core resolution logic ─────────────────────────────────────────────────
 
@@ -40,8 +40,7 @@ public class AdGroupMappingServiceImpl implements AdGroupMappingService {
         Set<UserGroup> resolved = new HashSet<>();
 
         for (AdLdapGroupService.LdapGroup ldapGroup : ldapGroups) {
-            Optional<AdGroupMapping> mapping =
-                    adGroupMappingRepository.findByAdGroupId(ldapGroup.groupId());
+            Optional<AdGroupMapping> mapping = adGroupMappingRepository.findByAdGroupId(ldapGroup.groupId());
 
             if (mapping.isPresent() && mapping.get().getLocalGroup() != null) {
                 resolved.add(mapping.get().getLocalGroup());

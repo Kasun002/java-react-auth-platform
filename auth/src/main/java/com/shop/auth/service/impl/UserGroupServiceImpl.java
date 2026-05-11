@@ -7,15 +7,21 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.shop.auth.dto.BankingRoleDto;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.shop.auth.dto.CreateGroupRequestDto;
 import com.shop.auth.dto.PermissionDto;
+import com.shop.auth.dto.RoleDto;
+import com.shop.auth.dto.UpdateGroupRequestDto;
 import com.shop.auth.dto.UserGroupDto;
-import com.shop.auth.entity.BankingRole;
 import com.shop.auth.entity.Permission;
+import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
+import com.shop.auth.exception.ConflictException;
 import com.shop.auth.exception.ResourceNotFoundException;
-import com.shop.auth.repository.BankingRoleRepository;
+import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.UserGroupService;
@@ -23,18 +29,15 @@ import com.shop.auth.service.UserGroupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserGroupServiceImpl implements UserGroupService {
 
-    private final UserGroupRepository   userGroupRepository;
-    private final BankingRoleRepository bankingRoleRepository;
-    private final UserRepository        userRepository;
+    private final UserGroupRepository userGroupRepository;
+    private final RoleRepository roleRepository;
+    private final UserRepository userRepository;
 
     @Override
     public List<UserGroupDto> listAll() {
@@ -55,12 +58,73 @@ public class UserGroupServiceImpl implements UserGroupService {
 
     @Override
     @Transactional
+    public UserGroupDto create(CreateGroupRequestDto request) {
+        String name = request.getName().trim();
+        log.debug("Creating group name=[{}]", name);
+
+        if (userGroupRepository.existsByName(name)) {
+            throw new ConflictException("Group with name '" + name + "' already exists");
+        }
+
+        UserGroup group = new UserGroup();
+        group.setName(name);
+        group.setType(request.getType().trim());
+        group.setDescription(request.getDescription());
+
+        UserGroup saved = userGroupRepository.save(group);
+        log.info("Group created: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public UserGroupDto update(Long groupId, UpdateGroupRequestDto request) {
+        String name = request.getName().trim();
+        log.debug("Updating group id=[{}] name=[{}]", groupId, name);
+
+        UserGroup group = userGroupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
+
+        userGroupRepository.findByName(name)
+                .filter(existing -> !existing.getId().equals(groupId))
+                .ifPresent(existing -> {
+                    throw new ConflictException("Group with name '" + name + "' already exists");
+                });
+
+        group.setName(name);
+        group.setType(request.getType().trim());
+        group.setDescription(request.getDescription());
+
+        UserGroup saved = userGroupRepository.save(group);
+        log.info("Group updated: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long groupId) {
+        log.debug("Deleting group id=[{}]", groupId);
+
+        UserGroup group = userGroupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
+
+        if (userRepository.existsByGroupsId(groupId)) {
+            throw new ConflictException(
+                    "Group '" + group.getName() + "' still has members and cannot be deleted");
+        }
+
+        userGroupRepository.delete(group);
+        log.info("Group deleted: id=[{}] name=[{}]", groupId, group.getName());
+    }
+
+    @Override
+    @Transactional
     public UserGroupDto assignRoleToGroup(Long groupId, Long roleId) {
         log.debug("Assigning role id=[{}] to group id=[{}]", roleId, groupId);
 
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
-        BankingRole role = bankingRoleRepository.findById(roleId)
+        Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
 
         boolean alreadyAssigned = group.getRoles().stream()
@@ -84,7 +148,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
-        if (!bankingRoleRepository.existsById(roleId)) {
+        if (!roleRepository.existsById(roleId)) {
             throw new ResourceNotFoundException("Role", roleId);
         }
 
@@ -113,7 +177,7 @@ public class UserGroupServiceImpl implements UserGroupService {
     public void addUserToGroup(Long userId, Long groupId) {
         log.debug("Adding user id=[{}] to group id=[{}]", userId, groupId);
 
-        User      user  = userRepository.findById(userId)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
@@ -161,12 +225,12 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         // Via group memberships
         for (UserGroup group : user.getGroups()) {
-            for (BankingRole role : group.getRoles()) {
+            for (Role role : group.getRoles()) {
                 role.getPermissions().forEach(p -> permissions.add(p.getCode()));
             }
         }
         // Via direct role assignments
-        for (BankingRole role : user.getDirectRoles()) {
+        for (Role role : user.getDirectRoles()) {
             role.getPermissions().forEach(p -> permissions.add(p.getCode()));
         }
 
@@ -183,14 +247,14 @@ public class UserGroupServiceImpl implements UserGroupService {
         dto.setDescription(group.getDescription());
         dto.setType(group.getType());
         dto.setRoles(group.getRoles().stream()
-                .sorted(Comparator.comparing(BankingRole::getName))
+                .sorted(Comparator.comparing(Role::getName))
                 .map(this::toRoleDto)
                 .collect(Collectors.toList()));
         return dto;
     }
 
-    private BankingRoleDto toRoleDto(BankingRole role) {
-        BankingRoleDto dto = new BankingRoleDto();
+    private RoleDto toRoleDto(Role role) {
+        RoleDto dto = new RoleDto();
         dto.setId(role.getId());
         dto.setName(role.getName());
         dto.setDescription(role.getDescription());

@@ -3,15 +3,13 @@ package com.shop.auth.service.impl;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -57,10 +55,10 @@ import com.shop.auth.service.PasswordPolicyService;
 import com.shop.auth.service.TokenBlacklistService;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
 import com.shop.auth.utils.UserStatus;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -69,16 +67,15 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private static final int    MAX_FAILED_ATTEMPTS  = 5;
-    private static final int    LOCKOUT_DURATION_MIN = 30;
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final int LOCKOUT_DURATION_MIN = 30;
 
     /**
      * Pre-computed BCrypt hash used for the timing-safe dummy password check
      * when a user is not found. Ensures user-not-found and wrong-password paths
      * take the same amount of time, preventing user-enumeration via timing.
      */
-    private static final String DUMMY_BCRYPT_HASH =
-            "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final String DUMMY_BCRYPT_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     @Value("${app.security.password.max-age-days:90}")
     private int passwordMaxAgeDays;
@@ -94,15 +91,15 @@ public class AuthServiceImpl implements AuthService {
 
     private static final String RESET_TOKEN_PREFIX = "reset:token:";
 
-    private final UserRepository        userRepository;
-    private final UserGroupRepository   userGroupRepository;
-    private final UserLogRepository     userLogRepository;
-    private final PasswordEncoder       passwordEncoder;
-    private final JwtService            jwtService;
-    private final OtpService            otpService;
+    private final UserRepository userRepository;
+    private final UserGroupRepository userGroupRepository;
+    private final UserLogRepository userLogRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final OtpService otpService;
     private final TokenBlacklistService tokenBlacklistService;
     private final PasswordPolicyService passwordPolicyService;
-    private final EmailService          emailService;
+    private final EmailService emailService;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     // ── Register ─────────────────────────────────────────────────────────────
@@ -116,8 +113,8 @@ public class AuthServiceImpl implements AuthService {
             throw new EmailAlreadyExistsException(request.getEmail());
         }
 
-        log.debug("Building user entity for email=[{}] role=[{}]",
-                MaskingUtil.maskEmail(request.getEmail()), request.getRole());
+        log.debug("Building user entity for email=[{}]",
+                MaskingUtil.maskEmail(request.getEmail()));
 
         User user = new User();
         String encodedPassword = passwordEncoder.encode(request.getPassword());
@@ -127,7 +124,6 @@ public class AuthServiceImpl implements AuthService {
         user.setPhone(request.getPhone());
         user.setPassword(encodedPassword);
         user.setStatus(UserStatus.NEW);
-        user.setRole(request.getRole() != null ? request.getRole() : Role.USER);
         user.setPasswordChangedAt(LocalDateTime.now());
 
         List<Address> addresses = request.getAddresses().stream()
@@ -148,13 +144,15 @@ public class AuthServiceImpl implements AuthService {
 
         log.debug("Persisting user with [{}] address(es)", addresses.size());
         userRepository.save(user);
-        log.info("User persisted successfully — email=[{}] status=[{}] role=[{}]",
-                MaskingUtil.maskEmail(user.getEmail()), user.getStatus(), user.getRole());
+        log.info("User persisted successfully — email=[{}] status=[{}]",
+                MaskingUtil.maskEmail(user.getEmail()), user.getStatus());
 
-        // Seed password history so future change-password can enforce no-reuse from day one
+        // Seed password history so future change-password can enforce no-reuse from day
+        // one
         passwordPolicyService.recordPasswordChange(user, encodedPassword);
 
-        // Auto-assign new users to the default RETAIL_CUSTOMER group (PCI-DSS Req 7.2 — least privilege)
+        // Auto-assign new users to the default RETAIL_CUSTOMER group (PCI-DSS Req 7.2 —
+        // least privilege)
         userGroupRepository.findByName("RETAIL_CUSTOMER").ifPresentOrElse(
                 group -> {
                     user.getGroups().add(group);
@@ -163,10 +161,10 @@ public class AuthServiceImpl implements AuthService {
                             MaskingUtil.maskEmail(user.getEmail()));
                 },
                 () -> log.warn("RETAIL_CUSTOMER group not found — user registered without default group: email=[{}]",
-                        MaskingUtil.maskEmail(user.getEmail()))
-        );
+                        MaskingUtil.maskEmail(user.getEmail())));
 
-        // OTP runs in REQUIRES_NEW — failure does not roll back the committed user record
+        // OTP runs in REQUIRES_NEW — failure does not roll back the committed user
+        // record
         try {
             otpService.generateAndSend(user);
         } catch (Exception e) {
@@ -186,7 +184,8 @@ public class AuthServiceImpl implements AuthService {
     public LoginResponseDto login(LoginRequestDto request) {
         log.debug("Login attempt for email=[{}]", MaskingUtil.maskEmail(request.getUsername()));
 
-        // Step 1 — look up user, equalize timing if not found (prevents user enumeration)
+        // Step 1 — look up user, equalize timing if not found (prevents user
+        // enumeration)
         Optional<User> optionalUser = userRepository.findByEmail(request.getUsername());
         if (optionalUser.isEmpty()) {
             passwordEncoder.matches(request.getPassword(), DUMMY_BCRYPT_HASH); // timing equalizer
@@ -202,7 +201,8 @@ public class AuthServiceImpl implements AuthService {
             throw new AccountLockedException(user.getLockedUntil());
         }
 
-        // Step 3 — verify password; track failed attempts and lock if threshold breached
+        // Step 3 — verify password; track failed attempts and lock if threshold
+        // breached
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             recordFailedAttempt(user);
             log.warn("Login failed — bad credentials: email=[{}] attempts=[{}]",
@@ -210,7 +210,8 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException();
         }
 
-        // Step 4 — account must be ACTIVE (checked after password to avoid leaking account state)
+        // Step 4 — account must be ACTIVE (checked after password to avoid leaking
+        // account state)
         if (user.getStatus() != UserStatus.ACTIVE) {
             log.warn("Login rejected — account not active: email=[{}] status=[{}]",
                     MaskingUtil.maskEmail(user.getEmail()), user.getStatus());
@@ -225,7 +226,8 @@ public class AuthServiceImpl implements AuthService {
             throw new PasswordExpiredException(passwordMaxAgeDays);
         }
 
-        // Step 6 — record login time and reset failure counters if needed; always persist
+        // Step 6 — record login time and reset failure counters if needed; always
+        // persist
         user.setLastLoginAt(LocalDateTime.now());
         if (user.getFailedLoginAttempts() > 0 || user.getLockedUntil() != null) {
             user.setFailedLoginAttempts(0);
@@ -233,14 +235,14 @@ public class AuthServiceImpl implements AuthService {
         }
         userRepository.save(user);
 
-        String accessToken  = jwtService.generateAccessToken(user);
+        String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
-        persistUserLog(user, accessToken,  TokenType.ACCESS);
+        persistUserLog(user, accessToken, TokenType.ACCESS);
         persistUserLog(user, refreshToken, TokenType.REFRESH);
 
-        log.info("Login successful — email=[{}] role=[{}]",
-                MaskingUtil.maskEmail(user.getEmail()), user.getRole());
+        log.info("Login successful — email=[{}]",
+                MaskingUtil.maskEmail(user.getEmail()));
 
         LoginResponseDto response = new LoginResponseDto();
         response.setAccessToken(accessToken);
@@ -292,19 +294,25 @@ public class AuthServiceImpl implements AuthService {
     /**
      * Exchanges a valid refresh token for a new access + refresh token pair.
      *
-     * <p>Validation order (each step fails fast with the same generic 401 to
-     * prevent information leakage):</p>
+     * <p>
+     * Validation order (each step fails fast with the same generic 401 to
+     * prevent information leakage):
+     * </p>
      * <ol>
-     *   <li>Signature and expiry — rejects tampered or expired tokens.</li>
-     *   <li>Token type must be REFRESH — rejects access tokens used as refresh tokens.</li>
-     *   <li>JTI blacklist check — rejects already-used or revoked refresh tokens.
-     *       A hit here indicates possible token theft; the caller should re-authenticate.</li>
-     *   <li>User must still be ACTIVE — rejects suspended accounts.</li>
+     * <li>Signature and expiry — rejects tampered or expired tokens.</li>
+     * <li>Token type must be REFRESH — rejects access tokens used as refresh
+     * tokens.</li>
+     * <li>JTI blacklist check — rejects already-used or revoked refresh tokens.
+     * A hit here indicates possible token theft; the caller should
+     * re-authenticate.</li>
+     * <li>User must still be ACTIVE — rejects suspended accounts.</li>
      * </ol>
      *
-     * <p>Refresh token rotation: the supplied refresh token is blacklisted immediately
+     * <p>
+     * Refresh token rotation: the supplied refresh token is blacklisted immediately
      * after the new pair is generated. This ensures each refresh token can be used
-     * exactly once, limiting the window for replay attacks.</p>
+     * exactly once, limiting the window for replay attacks.
+     * </p>
      */
     @Override
     @Transactional
@@ -345,10 +353,10 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // Issue new token pair BEFORE blacklisting the old refresh token
-        String newAccessToken  = jwtService.generateAccessToken(user);
+        String newAccessToken = jwtService.generateAccessToken(user);
         String newRefreshToken = jwtService.generateRefreshToken(user);
 
-        persistUserLog(user, newAccessToken,  TokenType.ACCESS);
+        persistUserLog(user, newAccessToken, TokenType.ACCESS);
         persistUserLog(user, newRefreshToken, TokenType.REFRESH);
 
         // Rotate: blacklist the consumed refresh token so it cannot be reused
@@ -378,8 +386,10 @@ public class AuthServiceImpl implements AuthService {
      * Generates a single-use reset token, stores its SHA-256 hash in Redis with a
      * short TTL, and sends a reset link to the user's email.
      *
-     * <p>Always returns the same response regardless of whether the email exists,
-     * to prevent account enumeration attacks.</p>
+     * <p>
+     * Always returns the same response regardless of whether the email exists,
+     * to prevent account enumeration attacks.
+     * </p>
      */
     @Override
     public void forgotPassword(ForgotPasswordRequestDto request) {
@@ -388,14 +398,14 @@ public class AuthServiceImpl implements AuthService {
 
         userRepository.findByEmail(email).ifPresent(user -> {
             // Generate a cryptographically random token — never stored in plain text
-            String rawToken   = UUID.randomUUID().toString();
-            String tokenHash  = HashUtil.sha256Hex(rawToken);
+            String rawToken = UUID.randomUUID().toString();
+            String tokenHash = HashUtil.sha256Hex(rawToken);
 
             long ttlSeconds = (long) passwordResetTokenTtlMinutes * 60;
             redisTemplate.opsForValue()
                     .set(RESET_TOKEN_PREFIX + tokenHash,
-                         String.valueOf(user.getId()),
-                         ttlSeconds, TimeUnit.SECONDS);
+                            String.valueOf(user.getId()),
+                            ttlSeconds, TimeUnit.SECONDS);
 
             String resetLink = passwordResetBaseUrl + "?token=" + rawToken;
             try {
@@ -407,7 +417,8 @@ public class AuthServiceImpl implements AuthService {
             }
         });
 
-        // Log at info level whether user was found or not — same response to caller either way
+        // Log at info level whether user was found or not — same response to caller
+        // either way
         log.info("Forgot-password flow completed for email=[{}]", MaskingUtil.maskEmail(email));
     }
 
@@ -457,13 +468,15 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * Revokes the session by blacklisting both the access and refresh token JTIs
-     * in Redis.  Each entry is stored with the token's remaining TTL so Redis
+     * in Redis. Each entry is stored with the token's remaining TTL so Redis
      * self-expires the entry — the blacklist never grows unbounded.
      *
-     * <p>Each token is revoked independently; failure to revoke one does not
-     * prevent revoking the other.  A missing or invalid refresh token is logged
+     * <p>
+     * Each token is revoked independently; failure to revoke one does not
+     * prevent revoking the other. A missing or invalid refresh token is logged
      * as a warning but does not cause the call to fail — the access token is
-     * always revoked.</p>
+     * always revoked.
+     * </p>
      */
     @Override
     public void logout(String accessToken, String refreshToken) {
@@ -484,14 +497,14 @@ public class AuthServiceImpl implements AuthService {
 
     /**
      * Extracts the JTI from the token, computes its remaining lifetime in seconds,
-     * and adds it to the Redis blacklist.  If the token is already expired the TTL
+     * and adds it to the Redis blacklist. If the token is already expired the TTL
      * will be &le; 0 and {@link TokenBlacklistService#blacklist} will be a no-op.
      */
     private void revokeToken(String token, String tokenLabel) {
         try {
-            String jti        = jwtService.extractJti(token);
-            long   ttlSeconds = jwtService.extractExpiration(token).toInstant().getEpochSecond()
-                                - Instant.now().getEpochSecond();
+            String jti = jwtService.extractJti(token);
+            long ttlSeconds = jwtService.extractExpiration(token).toInstant().getEpochSecond()
+                    - Instant.now().getEpochSecond();
             tokenBlacklistService.blacklist(jti, ttlSeconds);
             log.debug("Token revoked — type=[{}] jti=[{}] ttlSeconds=[{}]", tokenLabel, jti, ttlSeconds);
         } catch (Exception e) {
@@ -512,10 +525,12 @@ public class AuthServiceImpl implements AuthService {
     /**
      * Returns a paginated slice of all users.
      *
-     * <p>Runs in a read-only transaction so Hibernate skips dirty-checking on
+     * <p>
+     * Runs in a read-only transaction so Hibernate skips dirty-checking on
      * the loaded entities, giving a small performance gain for large pages.
      * Lazy collections (groups, directRoles, addresses) are accessed within the
-     * same session via {@link #buildUserDto}, which is safe inside the transaction.</p>
+     * same session via {@link #buildUserDto}, which is safe inside the transaction.
+     * </p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -568,7 +583,8 @@ public class AuthServiceImpl implements AuthService {
                 })
                 .collect(Collectors.toList());
 
-        // RBAC fields — computed from group/role membership (empty until Step 4 assigns groups)
+        // RBAC fields — computed from group/role membership (empty until Step 4 assigns
+        // groups)
         List<String> groupNames = user.getGroups().stream()
                 .map(g -> g.getName())
                 .collect(Collectors.toList());
@@ -578,11 +594,9 @@ public class AuthServiceImpl implements AuthService {
         user.getDirectRoles().forEach(r -> roleNames.add(r.getName()));
 
         Set<String> permCodes = new LinkedHashSet<>();
-        user.getGroups().forEach(g ->
-                g.getRoles().forEach(r ->
-                        r.getPermissions().forEach(p -> permCodes.add(p.getCode()))));
-        user.getDirectRoles().forEach(r ->
-                r.getPermissions().forEach(p -> permCodes.add(p.getCode())));
+        user.getGroups()
+                .forEach(g -> g.getRoles().forEach(r -> r.getPermissions().forEach(p -> permCodes.add(p.getCode()))));
+        user.getDirectRoles().forEach(r -> r.getPermissions().forEach(p -> permCodes.add(p.getCode())));
 
         UserDto dto = new UserDto();
         dto.setId(user.getId());
@@ -590,7 +604,6 @@ public class AuthServiceImpl implements AuthService {
         dto.setEmail(user.getEmail());
         dto.setPhone(user.getPhone());
         dto.setStatus(user.getStatus());
-        dto.setRole(user.getRole());
         dto.setAuthProvider(user.getAuthProvider());
         dto.setDateOfBirth(user.getDateOfBirth());
         dto.setGender(user.getGender());
@@ -613,7 +626,7 @@ public class AuthServiceImpl implements AuthService {
 
         UserLog userLog = new UserLog();
         userLog.setUser(user);
-        userLog.setUserToken(HashUtil.sha256Hex(token));  // store hash, not raw token
+        userLog.setUserToken(HashUtil.sha256Hex(token)); // store hash, not raw token
         userLog.setTokenType(tokenType);
         userLog.setIssuedAt(LocalDateTime.now());
         userLog.setExpiresAt(expiresAt);
@@ -628,7 +641,8 @@ public class AuthServiceImpl implements AuthService {
      */
     private String extractClientIp() {
         HttpServletRequest request = currentRequest();
-        if (request == null) return null;
+        if (request == null)
+            return null;
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim(); // first entry is the originating client
@@ -638,14 +652,14 @@ public class AuthServiceImpl implements AuthService {
 
     private String extractUserAgent() {
         HttpServletRequest request = currentRequest();
-        if (request == null) return null;
+        if (request == null)
+            return null;
         String ua = request.getHeader("User-Agent");
         return (ua != null && ua.length() > 512) ? ua.substring(0, 512) : ua;
     }
 
     private HttpServletRequest currentRequest() {
-        ServletRequestAttributes attrs =
-                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         return attrs != null ? attrs.getRequest() : null;
     }
 

@@ -4,6 +4,14 @@ import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.NonNull;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
 import com.shop.auth.security.UserPrincipal;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.TokenBlacklistService;
@@ -13,17 +21,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.jspecify.annotations.NonNull;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Validates the JWT Bearer token on every request and populates the
@@ -58,8 +57,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtService             jwtService;
-    private final TokenBlacklistService  tokenBlacklistService;
+    private final JwtService jwtService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -98,7 +97,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             // Step 4 — reject tokens issued before a user-level invalidation event
-            //           (password change, account suspension, admin-forced logout)
+            // (password change, account suspension, admin-forced logout)
             Long userId = jwtService.extractUserId(token);
             java.time.Instant issuedAt = jwtService.extractIssuedAt(token).toInstant();
             if (tokenBlacklistService.isUserTokensInvalidated(userId, issuedAt)) {

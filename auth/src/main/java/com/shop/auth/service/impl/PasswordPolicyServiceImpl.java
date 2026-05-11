@@ -26,7 +26,7 @@ public class PasswordPolicyServiceImpl implements PasswordPolicyService {
     private int historyCount;
 
     private final PasswordHistoryRepository passwordHistoryRepository;
-    private final PasswordEncoder           passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
 
     // ── History enforcement ───────────────────────────────────────────────────
 

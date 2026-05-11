@@ -14,7 +14,7 @@ import com.shop.auth.messaging.OtpEmailPublisher;
 import com.shop.auth.repository.OtpVerificationRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.OtpRateLimitService;
-import com.shop.auth.utils.Role;
+
 import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -64,7 +64,6 @@ class OtpServiceImplTest {
         newUser.setName("John Doe");
         newUser.setEmail("john.doe@example.com");
         newUser.setStatus(UserStatus.NEW);
-        newUser.setRole(Role.USER);
     }
 
     // ── generateAndSend ───────────────────────────────────────────────────────

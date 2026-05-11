@@ -1,6 +1,18 @@
 import api from "../lib/axios";
 import type { ApiResponse, UserDto } from "../types/auth";
-import type { BankingRoleDto, DashboardStatsDto, PageDto, PermissionDto, UserGroupDto } from "../types/admin";
+import type {
+  RoleDto,
+  DashboardStatsDto,
+  PageDto,
+  PermissionDto,
+  UserGroupDto,
+  CreatePermissionRequest,
+  UpdatePermissionRequest,
+  CreateRoleRequest,
+  UpdateRoleRequest,
+  CreateGroupRequest,
+  UpdateGroupRequest,
+} from "../types/admin";
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -12,19 +24,40 @@ export const getDashboardStats = () =>
 export const listPermissions = () =>
   api.get<ApiResponse<PermissionDto[]>>("/admin/permissions");
 
+export const createPermission = (data: CreatePermissionRequest) =>
+  api.post<ApiResponse<PermissionDto>>("/admin/permissions", data);
+
+export const updatePermission = (id: number, data: UpdatePermissionRequest) =>
+  api.put<ApiResponse<PermissionDto>>(`/admin/permissions/${id}`, data);
+
+export const deletePermission = (id: number) =>
+  api.delete<void>(`/admin/permissions/${id}`);
+
 // ── Roles ─────────────────────────────────────────────────────────────────────
 
-export const listRoles = () =>
-  api.get<ApiResponse<BankingRoleDto[]>>("/admin/roles");
+export const listRoles = () => api.get<ApiResponse<RoleDto[]>>("/admin/roles");
 
 export const getRole = (id: number) =>
-  api.get<ApiResponse<BankingRoleDto>>(`/admin/roles/${id}`);
+  api.get<ApiResponse<RoleDto>>(`/admin/roles/${id}`);
+
+export const createRole = (data: CreateRoleRequest) =>
+  api.post<ApiResponse<RoleDto>>("/admin/roles", data);
+
+export const updateRole = (id: number, data: UpdateRoleRequest) =>
+  api.put<ApiResponse<RoleDto>>(`/admin/roles/${id}`, data);
+
+export const deleteRole = (id: number) =>
+  api.delete<void>(`/admin/roles/${id}`);
 
 export const assignPermissionToRole = (roleId: number, permissionId: number) =>
-  api.post<ApiResponse<BankingRoleDto>>(`/admin/roles/${roleId}/permissions`, { permissionId });
+  api.post<ApiResponse<RoleDto>>(`/admin/roles/${roleId}/permissions`, {
+    permissionId,
+  });
 
-export const removePermissionFromRole = (roleId: number, permissionId: number) =>
-  api.delete<void>(`/admin/roles/${roleId}/permissions/${permissionId}`);
+export const removePermissionFromRole = (
+  roleId: number,
+  permissionId: number
+) => api.delete<void>(`/admin/roles/${roleId}/permissions/${permissionId}`);
 
 // ── Groups ────────────────────────────────────────────────────────────────────
 
@@ -34,8 +67,19 @@ export const listGroups = () =>
 export const getGroup = (id: number) =>
   api.get<ApiResponse<UserGroupDto>>(`/admin/groups/${id}`);
 
+export const createGroup = (data: CreateGroupRequest) =>
+  api.post<ApiResponse<UserGroupDto>>("/admin/groups", data);
+
+export const updateGroup = (id: number, data: UpdateGroupRequest) =>
+  api.put<ApiResponse<UserGroupDto>>(`/admin/groups/${id}`, data);
+
+export const deleteGroup = (id: number) =>
+  api.delete<void>(`/admin/groups/${id}`);
+
 export const assignRoleToGroup = (groupId: number, roleId: number) =>
-  api.post<ApiResponse<UserGroupDto>>(`/admin/groups/${groupId}/roles`, { roleId });
+  api.post<ApiResponse<UserGroupDto>>(`/admin/groups/${groupId}/roles`, {
+    roleId,
+  });
 
 export const removeRoleFromGroup = (groupId: number, roleId: number) =>
   api.delete<void>(`/admin/groups/${groupId}/roles/${roleId}`);

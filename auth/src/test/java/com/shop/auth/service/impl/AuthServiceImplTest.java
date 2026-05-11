@@ -12,7 +12,6 @@ import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.service.PasswordPolicyService;
-import com.shop.auth.utils.Role;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -149,46 +148,6 @@ class AuthServiceImplTest {
             authService.register(request);
 
             verify(passwordEncoder, times(1)).encode(request.getPassword());
-        }
-    }
-
-    // ── Role assignment ──────────────────────────────────────────────────────
-
-    @Nested
-    @DisplayName("Role assignment")
-    class RoleAssignment {
-
-        @Test
-        @DisplayName("Should default role to USER when null role is provided")
-        void shouldDefaultRoleToUser() {
-            RegisterRequestDto request = RegisterRequestDtoFixture.withNullRole();
-            stubHappyPath(request);
-
-            authService.register(request);
-
-            assertThat(capturePersistedUser().getRole()).isEqualTo(Role.USER);
-        }
-
-        @Test
-        @DisplayName("Should use USER role when explicitly provided")
-        void shouldUseExplicitUserRole() {
-            RegisterRequestDto request = RegisterRequestDtoFixture.withRole(Role.USER);
-            stubHappyPath(request);
-
-            authService.register(request);
-
-            assertThat(capturePersistedUser().getRole()).isEqualTo(Role.USER);
-        }
-
-        @Test
-        @DisplayName("Should use ADMIN role when explicitly provided")
-        void shouldUseExplicitAdminRole() {
-            RegisterRequestDto request = RegisterRequestDtoFixture.withRole(Role.ADMIN);
-            stubHappyPath(request);
-
-            authService.register(request);
-
-            assertThat(capturePersistedUser().getRole()).isEqualTo(Role.ADMIN);
         }
     }
 

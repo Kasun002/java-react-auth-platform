@@ -2,6 +2,9 @@ package com.shop.auth.entity;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -12,17 +15,17 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 /**
  * Maps an Azure AD / LDAP group to a local {@link UserGroup}.
  *
- * <p>The {@code adGroupId} is the Azure AD Object ID (GUID) or the LDAP CN,
- * depending on {@code app.ad.ldap.group-source} configuration.  It is always
+ * <p>
+ * The {@code adGroupId} is the Azure AD Object ID (GUID) or the LDAP CN,
+ * depending on {@code app.ad.ldap.group-source} configuration. It is always
  * stored and compared in its original form — no normalisation is applied.
  *
- * <p>When the local group is deleted, the mapping row is kept (FK ON DELETE SET
+ * <p>
+ * When the local group is deleted, the mapping row is kept (FK ON DELETE SET
  * NULL) so history is preserved and the group can be remapped later.
  */
 @Data
@@ -50,7 +53,10 @@ public class AdGroupMapping {
     @JoinColumn(name = "local_group_id")
     private UserGroup localGroup;
 
-    /** TRUE when this mapping was created automatically by the unmapped-group strategy. */
+    /**
+     * TRUE when this mapping was created automatically by the unmapped-group
+     * strategy.
+     */
     @Column(nullable = false)
     private boolean autoCreated = false;
 

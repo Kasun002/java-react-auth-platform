@@ -22,6 +22,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByStatus(UserStatus status);
     long countByAuthProvider(AuthProvider authProvider);
 
+    /** True if at least one user is a member of the given group. */
+    boolean existsByGroupsId(Long groupId);
+
     /**
      * Returns all users with their group memberships eagerly fetched.
      * Used by the dashboard group-distribution computation to avoid N+1 queries.

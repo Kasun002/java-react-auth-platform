@@ -3,13 +3,39 @@ package com.shop.auth.service;
 import java.util.List;
 import java.util.Set;
 
+import com.shop.auth.dto.CreateGroupRequestDto;
+import com.shop.auth.dto.UpdateGroupRequestDto;
 import com.shop.auth.dto.UserGroupDto;
+import com.shop.auth.exception.ConflictException;
 import com.shop.auth.exception.ResourceNotFoundException;
 
 public interface UserGroupService {
 
     /** Returns all groups with their assigned roles and permissions. */
     List<UserGroupDto> listAll();
+
+    /**
+     * Creates a new user group.
+     *
+     * @throws ConflictException if a group with the same name already exists
+     */
+    UserGroupDto create(CreateGroupRequestDto request);
+
+    /**
+     * Updates an existing group.
+     *
+     * @throws ResourceNotFoundException if no group exists with the given id
+     * @throws ConflictException         if the new name is already taken by another group
+     */
+    UserGroupDto update(Long groupId, UpdateGroupRequestDto request);
+
+    /**
+     * Deletes a group.
+     *
+     * @throws ResourceNotFoundException if no group exists with the given id
+     * @throws ConflictException         if the group still has members
+     */
+    void delete(Long groupId);
 
     /**
      * Returns a single group by ID.

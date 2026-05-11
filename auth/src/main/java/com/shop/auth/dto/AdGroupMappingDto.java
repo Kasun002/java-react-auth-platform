@@ -12,8 +12,7 @@ public class AdGroupMappingDto {
     @Schema(description = "Mapping ID", example = "1")
     private Long id;
 
-    @Schema(description = "Azure AD Object ID or LDAP CN of the AD group",
-            example = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+    @Schema(description = "Azure AD Object ID or LDAP CN of the AD group", example = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
     private String adGroupId;
 
     @Schema(description = "Display name of the AD group", example = "GRP-RETAIL-CUSTOMERS")
