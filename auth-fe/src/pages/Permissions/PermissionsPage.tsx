@@ -9,8 +9,137 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { BoltIcon } from "../../icons";
-import { listPermissions, listRoles } from "../../services/adminService";
-import type { RoleDto, PermissionDto } from "../../types/admin";
+import {
+  listPermissions,
+  listRoles,
+  createPermission,
+  updatePermission,
+  deletePermission,
+} from "../../services/adminService";
+import type { PermissionDto, RoleDto, CreatePermissionRequest, UpdatePermissionRequest } from "../../types/admin";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function apiError(err: unknown): string {
+  const e = err as { response?: { data?: { message?: string } } };
+  return e?.response?.data?.message ?? "An unexpected error occurred";
+}
+
+// ── Permission Modal ──────────────────────────────────────────────────────────
+
+interface PermissionModalProps {
+  initial?: PermissionDto;
+  onClose: () => void;
+  onSaved: (p: PermissionDto) => void;
+}
+
+function PermissionModal({ initial, onClose, onSaved }: PermissionModalProps) {
+  const [code, setCode] = useState(initial?.code ?? "");
+  const [category, setCategory] = useState(initial?.category ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      if (initial) {
+        const req: UpdatePermissionRequest = { code, category, description };
+        const res = await updatePermission(initial.id, req);
+        onSaved(res.data.data!);
+      } else {
+        const req: CreatePermissionRequest = { code, category, description };
+        const res = await createPermission(req);
+        onSaved(res.data.data!);
+      }
+      onClose();
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            {initial ? "Edit permission" : "New permission"}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Code <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="e.g. INVOICE_CREATE"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Category <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. INVOICE"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Description
+            </label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What this permission grants…"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? "Saving…" : initial ? "Save changes" : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function PermissionsPage() {
   const [permissions, setPermissions] = useState<PermissionDto[]>([]);
@@ -19,6 +148,10 @@ export default function PermissionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [catFilter, setCatFilter] = useState("ALL");
   const [query, setQuery] = useState("");
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<PermissionDto | undefined>(undefined);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([listPermissions(), listRoles()])
@@ -43,7 +176,7 @@ export default function PermissionsPage() {
           const q = query.toLowerCase();
           if (
             !p.code.toLowerCase().includes(q) &&
-            !p.description.toLowerCase().includes(q)
+            !(p.description ?? "").toLowerCase().includes(q)
           )
             return false;
         }
@@ -52,7 +185,6 @@ export default function PermissionsPage() {
     [permissions, catFilter, query]
   );
 
-  // Count how many roles use each permission
   const roleCountMap = useMemo(() => {
     const map: Record<number, number> = {};
     roles.forEach((r) => {
@@ -62,6 +194,39 @@ export default function PermissionsPage() {
     });
     return map;
   }, [roles]);
+
+  function openCreate() {
+    setEditing(undefined);
+    setModalOpen(true);
+  }
+
+  function openEdit(p: PermissionDto) {
+    setEditing(p);
+    setModalOpen(true);
+  }
+
+  function handleSaved(saved: PermissionDto) {
+    setPermissions((prev) => {
+      const idx = prev.findIndex((p) => p.id === saved.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      }
+      return [...prev, saved];
+    });
+  }
+
+  async function handleDelete(p: PermissionDto) {
+    if (!window.confirm(`Delete permission "${p.code}"? This cannot be undone.`)) return;
+    setDeleteError(null);
+    try {
+      await deletePermission(p.id);
+      setPermissions((prev) => prev.filter((x) => x.id !== p.id));
+    } catch (err) {
+      setDeleteError(apiError(err));
+    }
+  }
 
   return (
     <>
@@ -83,12 +248,26 @@ export default function PermissionsPage() {
         <div className="flex items-center gap-2">
           <Badge color="light" size="sm">OWASP ASVS L2</Badge>
           <Badge color="light" size="sm">PCI-DSS Req 7.2</Badge>
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+          >
+            <BoltIcon className="size-4" />
+            New permission
+          </button>
         </div>
       </div>
 
+      {/* ── Delete error banner ── */}
+      {deleteError && (
+        <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+          {deleteError}
+          <button onClick={() => setDeleteError(null)} className="ml-3 text-xs underline">Dismiss</button>
+        </div>
+      )}
+
       {/* ── Filters ── */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        {/* Search */}
         <div className="relative">
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -110,7 +289,6 @@ export default function PermissionsPage() {
           />
         </div>
 
-        {/* Category pill filter */}
         <div className="flex flex-wrap items-center gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
           {["ALL", ...categories].map((c) => (
             <button
@@ -152,9 +330,10 @@ export default function PermissionsPage() {
                     { label: "Category", className: "w-40 hidden md:table-cell" },
                     { label: "Description", className: "" },
                     { label: "Roles", className: "w-20 text-right hidden lg:table-cell" },
+                    { label: "", className: "w-24" },
                   ].map(({ label, className }) => (
                     <TableCell
-                      key={label}
+                      key={label || "_actions"}
                       isHeader
                       className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 ${className}`}
                     >
@@ -179,27 +358,36 @@ export default function PermissionsPage() {
                       key={p.id}
                       className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
                     >
-                      {/* Code */}
                       <TableCell className="px-6 py-3">
                         <span className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 dark:border-brand-500/30 dark:bg-brand-500/10 px-2.5 py-1 text-xs font-mono text-brand-700 dark:text-brand-300">
                           <BoltIcon className="size-3 shrink-0" />
                           {p.code}
                         </span>
                       </TableCell>
-
-                      {/* Category */}
                       <TableCell className="px-6 py-3 hidden md:table-cell">
                         <Badge color="light" size="sm">{p.category}</Badge>
                       </TableCell>
-
-                      {/* Description */}
                       <TableCell className="px-6 py-3 text-sm text-gray-600 dark:text-gray-400">
                         {p.description}
                       </TableCell>
-
-                      {/* Role count */}
                       <TableCell className="px-6 py-3 text-right text-sm tabular-nums text-gray-600 dark:text-gray-400 hidden lg:table-cell">
                         {roleCountMap[p.id] ?? 0}
+                      </TableCell>
+                      <TableCell className="px-6 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEdit(p)}
+                            className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/5 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p)}
+                            className="rounded px-2 py-1 text-xs font-medium text-error-500 hover:text-error-700 hover:bg-error-50 dark:hover:bg-error-500/10 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -209,6 +397,14 @@ export default function PermissionsPage() {
           </div>
         )}
       </div>
+
+      {modalOpen && (
+        <PermissionModal
+          initial={editing}
+          onClose={() => setModalOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
     </>
   );
 }

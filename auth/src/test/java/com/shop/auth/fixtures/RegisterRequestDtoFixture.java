@@ -5,7 +5,6 @@ import java.util.List;
 
 import com.shop.auth.dto.AddressDto;
 import com.shop.auth.dto.RegisterRequestDto;
-import com.shop.auth.utils.Role;
 
 /**
  * Test fixture factory for RegisterRequestDto.
@@ -23,7 +22,6 @@ public final class RegisterRequestDtoFixture {
         dto.setPhone("+94771234567");
         dto.setPassword("Secret@Pass1!");
         dto.setAddresses(new ArrayList<>(List.of(AddressDtoFixture.valid())));
-        dto.setRole(Role.USER);
         return dto;
     }
 
@@ -36,18 +34,6 @@ public final class RegisterRequestDtoFixture {
     public static RegisterRequestDto withPassword(String password) {
         RegisterRequestDto dto = valid();
         dto.setPassword(password);
-        return dto;
-    }
-
-    public static RegisterRequestDto withRole(Role role) {
-        RegisterRequestDto dto = valid();
-        dto.setRole(role);
-        return dto;
-    }
-
-    public static RegisterRequestDto withNullRole() {
-        RegisterRequestDto dto = valid();
-        dto.setRole(null);
         return dto;
     }
 

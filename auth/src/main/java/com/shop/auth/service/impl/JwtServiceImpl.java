@@ -142,7 +142,6 @@ public class JwtServiceImpl implements JwtService {
             .audience().add(AUDIENCE).and()         // aud — prevents cross-service replay
             .subject(user.getEmail())
             .claim("userId",      user.getId())
-            .claim("role",        user.getRole())   // kept for backward compat (deprecated in Step 4)
             .claim("tokenType",   tokenType.name())
             .claim("permissions", computePermissions(user))
             .claim("groups",      computeGroupNames(user))

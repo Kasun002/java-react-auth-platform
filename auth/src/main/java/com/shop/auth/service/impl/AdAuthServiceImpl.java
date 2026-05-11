@@ -40,7 +40,6 @@ import com.shop.auth.service.JwtService;
 import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
 import com.shop.auth.utils.UserStatus;
 
@@ -231,7 +230,6 @@ public class AdAuthServiceImpl implements AdAuthService {
         user.setAdObjectId(adObjectId);
         user.setAuthProvider(AuthProvider.AZURE_AD);
         user.setStatus(UserStatus.ACTIVE);
-        user.setRole(Role.USER);
         // Random unguessable password — local login is blocked for AZURE_AD users
         user.setPassword("$AD$" + UUID.randomUUID());
         user.setPasswordChangedAt(LocalDateTime.now()); // no password age enforcement for AD users; column is NOT NULL
@@ -295,7 +293,6 @@ public class AdAuthServiceImpl implements AdAuthService {
         dto.setEmail(user.getEmail());
         dto.setPhone(user.getPhone());
         dto.setStatus(user.getStatus());
-        dto.setRole(user.getRole());
         dto.setAuthProvider(user.getAuthProvider());
         dto.setDateOfBirth(user.getDateOfBirth());
         dto.setGender(user.getGender());

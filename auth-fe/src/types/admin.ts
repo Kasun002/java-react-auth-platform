@@ -70,3 +70,39 @@ export interface UserGroupDto {
   type: string;   // free-form — defined by the organization
   roles: RoleDto[];
 }
+
+// ── CRUD Requests ─────────────────────────────────────────────────────────────
+
+export interface CreatePermissionRequest {
+  code: string;
+  category: string;
+  description?: string;
+}
+
+export interface UpdatePermissionRequest {
+  code: string;
+  category: string;
+  description?: string;
+}
+
+export interface CreateRoleRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateRoleRequest {
+  name: string;
+  description?: string;
+}
+
+export interface CreateGroupRequest {
+  name: string;
+  type: string;
+  description?: string;
+}
+
+export interface UpdateGroupRequest {
+  name: string;
+  type: string;
+  description?: string;
+}

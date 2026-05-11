@@ -1,16 +1,21 @@
 package com.shop.auth.service.impl;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.shop.auth.dto.CreateRoleRequestDto;
 import com.shop.auth.dto.PermissionDto;
 import com.shop.auth.dto.RoleDto;
+import com.shop.auth.dto.UpdateRoleRequestDto;
 import com.shop.auth.entity.Permission;
 import com.shop.auth.entity.Role;
+import com.shop.auth.exception.ConflictException;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.repository.PermissionRepository;
 import com.shop.auth.repository.RoleRepository;
+import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.service.RoleService;
 
 import lombok.RequiredArgsConstructor;
@@ -27,6 +32,7 @@ public class RoleServiceImpl implements RoleService {
 
     private final RoleRepository       roleRepository;
     private final PermissionRepository permissionRepository;
+    private final UserGroupRepository  userGroupRepository;
 
     @Override
     public List<RoleDto> listAll() {
@@ -43,6 +49,66 @@ public class RoleServiceImpl implements RoleService {
         return roleRepository.findById(roleId)
                 .map(this::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
+    }
+
+    @Override
+    @Transactional
+    public RoleDto create(CreateRoleRequestDto request) {
+        String name = request.getName().trim();
+        log.debug("Creating role name=[{}]", name);
+
+        if (roleRepository.existsByName(name)) {
+            throw new ConflictException("Role with name '" + name + "' already exists");
+        }
+
+        Role role = new Role();
+        role.setName(name);
+        role.setDescription(request.getDescription());
+        role.setPermissions(new HashSet<>());
+
+        Role saved = roleRepository.save(role);
+        log.info("Role created: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public RoleDto update(Long roleId, UpdateRoleRequestDto request) {
+        String name = request.getName().trim();
+        log.debug("Updating role id=[{}] name=[{}]", roleId, name);
+
+        Role role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
+
+        roleRepository.findByName(name)
+                .filter(existing -> !existing.getId().equals(roleId))
+                .ifPresent(existing -> {
+                    throw new ConflictException("Role with name '" + name + "' already exists");
+                });
+
+        role.setName(name);
+        role.setDescription(request.getDescription());
+
+        Role saved = roleRepository.save(role);
+        log.info("Role updated: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long roleId) {
+        log.debug("Deleting role id=[{}]", roleId);
+
+        Role role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", roleId));
+
+        if (userGroupRepository.existsByRolesId(roleId)) {
+            throw new ConflictException(
+                    "Role '" + role.getName() + "' is still assigned to one or more groups and cannot be deleted");
+        }
+
+        roleRepository.delete(role);
+        log.info("Role deleted: id=[{}] name=[{}]", roleId, role.getName());
     }
 
     @Override

@@ -11,7 +11,6 @@ import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.TokenBlacklistService;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
 import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,7 +58,6 @@ class AuthServiceImplRefreshLogoutTest {
         activeUser.setId(1L);
         activeUser.setEmail("john.doe@example.com");
         activeUser.setStatus(UserStatus.ACTIVE);
-        activeUser.setRole(Role.USER);
     }
 
     // ── refresh ───────────────────────────────────────────────────────────────

@@ -57,7 +57,6 @@ import com.shop.auth.service.PasswordPolicyService;
 import com.shop.auth.service.TokenBlacklistService;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.TokenType;
 import com.shop.auth.utils.UserStatus;
 
@@ -116,8 +115,8 @@ public class AuthServiceImpl implements AuthService {
             throw new EmailAlreadyExistsException(request.getEmail());
         }
 
-        log.debug("Building user entity for email=[{}] role=[{}]",
-                MaskingUtil.maskEmail(request.getEmail()), request.getRole());
+        log.debug("Building user entity for email=[{}]",
+                MaskingUtil.maskEmail(request.getEmail()));
 
         User user = new User();
         String encodedPassword = passwordEncoder.encode(request.getPassword());
@@ -127,7 +126,6 @@ public class AuthServiceImpl implements AuthService {
         user.setPhone(request.getPhone());
         user.setPassword(encodedPassword);
         user.setStatus(UserStatus.NEW);
-        user.setRole(request.getRole() != null ? request.getRole() : Role.USER);
         user.setPasswordChangedAt(LocalDateTime.now());
 
         List<Address> addresses = request.getAddresses().stream()
@@ -148,8 +146,8 @@ public class AuthServiceImpl implements AuthService {
 
         log.debug("Persisting user with [{}] address(es)", addresses.size());
         userRepository.save(user);
-        log.info("User persisted successfully — email=[{}] status=[{}] role=[{}]",
-                MaskingUtil.maskEmail(user.getEmail()), user.getStatus(), user.getRole());
+        log.info("User persisted successfully — email=[{}] status=[{}]",
+                MaskingUtil.maskEmail(user.getEmail()), user.getStatus());
 
         // Seed password history so future change-password can enforce no-reuse from day one
         passwordPolicyService.recordPasswordChange(user, encodedPassword);
@@ -239,8 +237,8 @@ public class AuthServiceImpl implements AuthService {
         persistUserLog(user, accessToken,  TokenType.ACCESS);
         persistUserLog(user, refreshToken, TokenType.REFRESH);
 
-        log.info("Login successful — email=[{}] role=[{}]",
-                MaskingUtil.maskEmail(user.getEmail()), user.getRole());
+        log.info("Login successful — email=[{}]",
+                MaskingUtil.maskEmail(user.getEmail()));
 
         LoginResponseDto response = new LoginResponseDto();
         response.setAccessToken(accessToken);
@@ -590,7 +588,6 @@ public class AuthServiceImpl implements AuthService {
         dto.setEmail(user.getEmail());
         dto.setPhone(user.getPhone());
         dto.setStatus(user.getStatus());
-        dto.setRole(user.getRole());
         dto.setAuthProvider(user.getAuthProvider());
         dto.setDateOfBirth(user.getDateOfBirth());
         dto.setGender(user.getGender());

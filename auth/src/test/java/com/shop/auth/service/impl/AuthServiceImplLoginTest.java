@@ -15,7 +15,7 @@ import com.shop.auth.fixtures.LoginRequestDtoFixture;
 import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.JwtService;
-import com.shop.auth.utils.Role;
+
 import com.shop.auth.utils.TokenType;
 import com.shop.auth.utils.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +65,6 @@ class AuthServiceImplLoginTest {
         activeUser.setEmail("john.doe@example.com");
         activeUser.setPassword("$2a$10$hashed");
         activeUser.setStatus(UserStatus.ACTIVE);
-        activeUser.setRole(Role.USER);
         activeUser.setPasswordChangedAt(null); // User entity initialises this to now(); null skips age check
     }
 

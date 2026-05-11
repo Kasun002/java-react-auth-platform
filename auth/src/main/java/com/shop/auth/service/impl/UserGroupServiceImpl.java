@@ -7,13 +7,16 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.shop.auth.dto.CreateGroupRequestDto;
 import com.shop.auth.dto.PermissionDto;
 import com.shop.auth.dto.RoleDto;
+import com.shop.auth.dto.UpdateGroupRequestDto;
 import com.shop.auth.dto.UserGroupDto;
 import com.shop.auth.entity.Permission;
 import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
+import com.shop.auth.exception.ConflictException;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
@@ -51,6 +54,67 @@ public class UserGroupServiceImpl implements UserGroupService {
         return userGroupRepository.findById(groupId)
                 .map(this::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
+    }
+
+    @Override
+    @Transactional
+    public UserGroupDto create(CreateGroupRequestDto request) {
+        String name = request.getName().trim();
+        log.debug("Creating group name=[{}]", name);
+
+        if (userGroupRepository.existsByName(name)) {
+            throw new ConflictException("Group with name '" + name + "' already exists");
+        }
+
+        UserGroup group = new UserGroup();
+        group.setName(name);
+        group.setType(request.getType().trim());
+        group.setDescription(request.getDescription());
+
+        UserGroup saved = userGroupRepository.save(group);
+        log.info("Group created: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public UserGroupDto update(Long groupId, UpdateGroupRequestDto request) {
+        String name = request.getName().trim();
+        log.debug("Updating group id=[{}] name=[{}]", groupId, name);
+
+        UserGroup group = userGroupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
+
+        userGroupRepository.findByName(name)
+                .filter(existing -> !existing.getId().equals(groupId))
+                .ifPresent(existing -> {
+                    throw new ConflictException("Group with name '" + name + "' already exists");
+                });
+
+        group.setName(name);
+        group.setType(request.getType().trim());
+        group.setDescription(request.getDescription());
+
+        UserGroup saved = userGroupRepository.save(group);
+        log.info("Group updated: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long groupId) {
+        log.debug("Deleting group id=[{}]", groupId);
+
+        UserGroup group = userGroupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
+
+        if (userRepository.existsByGroupsId(groupId)) {
+            throw new ConflictException(
+                    "Group '" + group.getName() + "' still has members and cannot be deleted");
+        }
+
+        userGroupRepository.delete(group);
+        log.info("Group deleted: id=[{}] name=[{}]", groupId, group.getName());
     }
 
     @Override

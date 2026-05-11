@@ -6,7 +6,6 @@ import java.util.List;
 
 import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.Gender;
-import com.shop.auth.utils.Role;
 import com.shop.auth.utils.UserStatus;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,9 +38,6 @@ public class UserDto {
 
         @Schema(description = "Account status", example = "ACTIVE")
         private UserStatus status;
-
-        @Schema(description = "User role", example = "USER")
-        private Role role;
 
         @Schema(description = "How this account was originally provisioned", example = "LOCAL")
         private AuthProvider authProvider;

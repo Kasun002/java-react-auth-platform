@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import PageMeta from "../../components/common/PageMeta";
-import Badge from "../../components/ui/badge/Badge";
 import {
   Table,
   TableBody,
@@ -9,10 +8,132 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import { LockIcon, GroupIcon } from "../../icons";
-import { listRoles } from "../../services/adminService";
-import type { RoleDto } from "../../types/admin";
-import { GROUPS, USERS } from "../../temp_data/rbacData";
+import { LockIcon } from "../../icons";
+import {
+  createRole,
+  deleteRole,
+  listRoles,
+  updateRole,
+} from "../../services/adminService";
+import type {
+  CreateRoleRequest,
+  RoleDto,
+  UpdateRoleRequest,
+} from "../../types/admin";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function apiError(err: unknown): string {
+  const e = err as { response?: { data?: { message?: string } } };
+  return e?.response?.data?.message ?? "An unexpected error occurred";
+}
+
+// ── Role Modal ────────────────────────────────────────────────────────────────
+
+interface RoleModalProps {
+  initial?: RoleDto;
+  onClose: () => void;
+  onSaved: (r: RoleDto) => void;
+}
+
+function RoleModal({ initial, onClose, onSaved }: RoleModalProps) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      if (initial) {
+        const req: UpdateRoleRequest = { name, description };
+        const res = await updateRole(initial.id, req);
+        onSaved(res.data.data!);
+      } else {
+        const req: CreateRoleRequest = { name, description };
+        const res = await createRole(req);
+        onSaved(res.data.data!);
+      }
+      onClose();
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            {initial ? "Edit role" : "New role"}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+          {error && (
+            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Name <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. ROLE_MANAGER"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              Description
+            </label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What this role grants…"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? "Saving…" : initial ? "Save changes" : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function RolesPage() {
   const navigate = useNavigate();
@@ -20,6 +141,10 @@ export default function RolesPage() {
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<RoleDto | undefined>(undefined);
 
   useEffect(() => {
     listRoles()
@@ -28,27 +153,49 @@ export default function RolesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const enriched = useMemo(
-    () =>
-      roles.map((r) => ({
-        ...r,
-        groupCount: GROUPS.filter((g) => g.roles.some((gr) => gr === r.name)).length,
-        userCount: USERS.filter((u) =>
-          u.groups.some((gn) =>
-            GROUPS.find((g) => g.name === gn)?.roles.some((gr) => gr === r.name)
-          )
-        ).length,
-      })),
-    [roles]
-  );
-
   const totalBindings = roles.reduce((sum, r) => sum + r.permissions.length, 0);
+
+  function openCreate() {
+    setEditing(undefined);
+    setModalOpen(true);
+  }
+
+  function openEdit(r: RoleDto, e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditing(r);
+    setModalOpen(true);
+  }
+
+  function handleSaved(saved: RoleDto) {
+    setRoles((prev) => {
+      const idx = prev.findIndex((r) => r.id === saved.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      }
+      return [...prev, saved];
+    });
+  }
+
+  async function handleDelete(r: RoleDto, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`Delete role "${r.name}"? This cannot be undone.`))
+      return;
+    setDeleteError(null);
+    try {
+      await deleteRole(r.id);
+      setRoles((prev) => prev.filter((x) => x.id !== r.id));
+    } catch (err) {
+      setDeleteError(apiError(err));
+    }
+  }
 
   return (
     <>
       <PageMeta
         title="Roles | Auth Platform"
-        description="Manage banking roles and their permission assignments"
+        description="Manage roles and their permission assignments"
       />
 
       {/* ── Page header ── */}
@@ -58,14 +205,31 @@ export default function RolesPage() {
             Roles
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {roles.length} roles &middot; {totalBindings} role-permission bindings
+            {roles.length} roles &middot; {totalBindings} role-permission
+            bindings
           </p>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
+        <button
+          onClick={openCreate}
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+        >
           <LockIcon className="size-4" />
           New role
         </button>
       </div>
+
+      {/* ── Delete error banner ── */}
+      {deleteError && (
+        <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+          {deleteError}
+          <button
+            onClick={() => setDeleteError(null)}
+            className="ml-3 text-xs underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Table ── */}
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
@@ -85,11 +249,10 @@ export default function RolesPage() {
                   {[
                     { label: "Role", className: "" },
                     { label: "Permissions", className: "w-32 text-right" },
-                    { label: "Groups", className: "w-24 text-right hidden md:table-cell" },
-                    { label: "Users", className: "w-24 text-right hidden lg:table-cell" },
+                    { label: "", className: "w-24" },
                   ].map(({ label, className }) => (
                     <TableCell
-                      key={label}
+                      key={label || "_actions"}
                       isHeader
                       className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 ${className}`}
                     >
@@ -99,7 +262,7 @@ export default function RolesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {enriched.length === 0 ? (
+                {roles.length === 0 ? (
                   <TableRow>
                     <TableCell className="px-6 py-12 text-center text-sm text-gray-400">
                       <div className="flex flex-col items-center gap-2">
@@ -109,7 +272,7 @@ export default function RolesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  enriched.map((r) => (
+                  roles.map((r) => (
                     <TableRow
                       key={r.id}
                       className="hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer transition-colors"
@@ -139,14 +302,22 @@ export default function RolesPage() {
                         </span>
                       </TableCell>
 
-                      {/* Groups */}
-                      <TableCell className="px-6 py-3 text-right text-sm text-gray-600 dark:text-gray-400 tabular-nums hidden md:table-cell">
-                        {r.groupCount}
-                      </TableCell>
-
-                      {/* Users */}
-                      <TableCell className="px-6 py-3 text-right text-sm text-gray-600 dark:text-gray-400 tabular-nums hidden lg:table-cell">
-                        {r.userCount}
+                      {/* Actions */}
+                      <TableCell className="px-6 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => openEdit(r, e)}
+                            className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/5 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(r, e)}
+                            className="rounded px-2 py-1 text-xs font-medium text-error-500 hover:text-error-700 hover:bg-error-50 dark:hover:bg-error-500/10 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -156,6 +327,14 @@ export default function RolesPage() {
           </div>
         )}
       </div>
+
+      {modalOpen && (
+        <RoleModal
+          initial={editing}
+          onClose={() => setModalOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
     </>
   );
 }

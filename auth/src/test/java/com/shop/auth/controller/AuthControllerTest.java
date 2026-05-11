@@ -105,16 +105,6 @@ class AuthControllerTest {
                 .andExpect(status().isCreated());
         }
 
-        @Test
-        @DisplayName("Should accept request without optional role — service defaults to USER")
-        void shouldAcceptRequestWithoutRole() throws Exception {
-            doNothing().when(authService).register(any());
-
-            mockMvc.perform(post(REGISTER_URL)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(RegisterRequestDtoFixture.withNullRole())))
-                .andExpect(status().isCreated());
-        }
     }
 
     // ── Validation failures ──────────────────────────────────────────────────

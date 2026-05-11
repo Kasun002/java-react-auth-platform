@@ -9,7 +9,6 @@ import java.util.Set;
 
 import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.Gender;
-import com.shop.auth.utils.Role;        // legacy enum — kept for backward compat JWT claim
 import com.shop.auth.utils.UserStatus;
 
 import jakarta.persistence.CascadeType;
@@ -70,10 +69,6 @@ public class User {
     @Column(nullable = false)
     @NotNull
     private UserStatus status;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = true)
-    private Role role;
 
     // ── Optional profile fields ───────────────────────────────────────────────
 
