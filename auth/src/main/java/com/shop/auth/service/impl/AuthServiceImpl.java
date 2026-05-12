@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,8 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.shop.auth.dto.AddressDto;
+import com.shop.auth.dto.AdminCreateUserRequestDto;
+import com.shop.auth.dto.AdminUpdateUserRequestDto;
 import com.shop.auth.dto.ChangePasswordRequestDto;
 import com.shop.auth.dto.ForgotPasswordRequestDto;
 import com.shop.auth.dto.LoginRequestDto;
@@ -31,6 +34,7 @@ import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.ResetPasswordRequestDto;
+import com.shop.auth.dto.UpdateUserStatusRequestDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 import com.shop.auth.entity.Address;
@@ -44,15 +48,19 @@ import com.shop.auth.exception.PasswordExpiredException;
 import com.shop.auth.exception.PasswordResetTokenException;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.exception.UserNotActiveException;
+import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
+import com.shop.auth.service.AuditHelper;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.service.EmailService;
 import com.shop.auth.service.JwtService;
 import com.shop.auth.service.OtpService;
 import com.shop.auth.service.PasswordPolicyService;
 import com.shop.auth.service.TokenBlacklistService;
+import com.shop.auth.utils.AuditStatus;
+import com.shop.auth.utils.AuthProvider;
 import com.shop.auth.utils.HashUtil;
 import com.shop.auth.utils.MaskingUtil;
 import com.shop.auth.utils.TokenType;
@@ -93,6 +101,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final UserGroupRepository userGroupRepository;
+    private final RoleRepository roleRepository;
     private final UserLogRepository userLogRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -100,6 +109,7 @@ public class AuthServiceImpl implements AuthService {
     private final TokenBlacklistService tokenBlacklistService;
     private final PasswordPolicyService passwordPolicyService;
     private final EmailService emailService;
+    private final AuditHelper auditHelper;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     // ── Register ─────────────────────────────────────────────────────────────
@@ -552,6 +562,144 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         return buildUserDto(user);
+    }
+
+    // ── Admin — user management ───────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public UserDto adminCreateUser(AdminCreateUserRequestDto request) {
+        log.info("Admin: creating user email=[{}]", MaskingUtil.maskEmail(request.getEmail()));
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new EmailAlreadyExistsException(request.getEmail());
+        }
+
+        String encodedPassword = passwordEncoder.encode(request.getTemporaryPassword());
+
+        User user = new User();
+        user.setName(request.getName());
+        user.setEmail(request.getEmail());
+        user.setPhone(request.getPhone());
+        user.setPassword(encodedPassword);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setPasswordChangedAt(LocalDateTime.now());
+
+        // Assign requested groups
+        for (Long groupId : request.getGroupIds()) {
+            userGroupRepository.findById(groupId).ifPresent(g -> user.getGroups().add(g));
+        }
+
+        // Assign requested direct roles
+        for (Long roleId : request.getRoleIds()) {
+            roleRepository.findById(roleId).ifPresent(r -> user.getDirectRoles().add(r));
+        }
+
+        userRepository.save(user);
+        passwordPolicyService.recordPasswordChange(user, encodedPassword);
+
+        log.info("Admin: user created id=[{}] email=[{}]", user.getId(), MaskingUtil.maskEmail(user.getEmail()));
+        auditHelper.record("USER_CREATED", "USER", String.valueOf(user.getId()),
+                "Admin provisioned user: " + user.getEmail(), AuditStatus.SUCCESS);
+
+        return buildUserDto(user);
+    }
+
+    @Override
+    @Transactional
+    public UserDto adminUpdateUser(Long userId, AdminUpdateUserRequestDto request) {
+        log.info("Admin: updating user id=[{}]", userId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        // AD/LDAP users are managed in Active Directory — profile edits must go through Keycloak/LDAP
+        if (user.getAuthProvider() == AuthProvider.AZURE_AD) {
+            throw new com.shop.auth.exception.BusinessException(
+                    "Profile of Azure AD users cannot be modified here. Make changes in Active Directory.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        // Enforce email uniqueness only when the email actually changes
+        if (!user.getEmail().equalsIgnoreCase(request.getEmail())
+                && userRepository.existsByEmail(request.getEmail())) {
+            throw new EmailAlreadyExistsException(request.getEmail());
+        }
+
+        user.setName(request.getName());
+        user.setEmail(request.getEmail());
+        user.setPhone(request.getPhone());
+        userRepository.save(user);
+
+        log.info("Admin: user updated id=[{}]", userId);
+        auditHelper.record("USER_UPDATED", "USER", String.valueOf(userId),
+                "Admin updated profile for user: " + user.getEmail(), AuditStatus.SUCCESS);
+
+        return buildUserDto(user);
+    }
+
+    @Override
+    @Transactional
+    public UserDto updateUserStatus(Long userId, UpdateUserStatusRequestDto request, Long requestingAdminId) {
+        log.info("Admin: updating status for user id=[{}] to status=[{}]", userId, request.getStatus());
+
+        // Prevent system-managed statuses from being set via this endpoint
+        if (request.getStatus() == UserStatus.NEW || request.getStatus() == UserStatus.DELETED) {
+            throw new com.shop.auth.exception.BusinessException(
+                    "Status " + request.getStatus() + " is system-managed and cannot be set directly",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        // Self-action guard — admins cannot change their own status
+        if (userId.equals(requestingAdminId)) {
+            throw new com.shop.auth.exception.BusinessException(
+                    "Admins cannot change their own account status", HttpStatus.BAD_REQUEST);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        UserStatus previousStatus = user.getStatus();
+        user.setStatus(request.getStatus());
+        userRepository.save(user);
+
+        // Immediately invalidate all active tokens when suspending
+        if (request.getStatus() == UserStatus.SUSPENDED) {
+            long ttlSeconds = refreshTokenExpiryMs / 1000;
+            tokenBlacklistService.invalidateAllUserTokens(userId, ttlSeconds);
+            log.info("Admin: all tokens invalidated for suspended user id=[{}]", userId);
+        }
+
+        String action = request.getStatus() == UserStatus.SUSPENDED ? "USER_SUSPENDED" : "USER_STATUS_CHANGED";
+        auditHelper.record(action, "USER", String.valueOf(userId),
+                "Status changed from " + previousStatus + " to " + request.getStatus(), AuditStatus.SUCCESS);
+
+        return buildUserDto(user);
+    }
+
+    @Override
+    @Transactional
+    public void adminDeleteUser(Long userId, Long requestingAdminId) {
+        log.info("Admin: soft-deleting user id=[{}]", userId);
+
+        // Self-action guard
+        if (userId.equals(requestingAdminId)) {
+            throw new com.shop.auth.exception.BusinessException(
+                    "Admins cannot delete their own account", HttpStatus.BAD_REQUEST);
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        user.setStatus(UserStatus.DELETED);
+        userRepository.save(user);
+
+        long ttlSeconds = refreshTokenExpiryMs / 1000;
+        tokenBlacklistService.invalidateAllUserTokens(userId, ttlSeconds);
+
+        log.info("Admin: user soft-deleted id=[{}]", userId);
+        auditHelper.record("USER_DELETED", "USER", String.valueOf(userId),
+                "Admin soft-deleted user: " + user.getEmail(), AuditStatus.SUCCESS);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

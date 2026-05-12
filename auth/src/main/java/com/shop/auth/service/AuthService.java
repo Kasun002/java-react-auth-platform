@@ -3,6 +3,8 @@ package com.shop.auth.service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import com.shop.auth.dto.AdminCreateUserRequestDto;
+import com.shop.auth.dto.AdminUpdateUserRequestDto;
 import com.shop.auth.dto.ChangePasswordRequestDto;
 import com.shop.auth.dto.ForgotPasswordRequestDto;
 import com.shop.auth.dto.LoginRequestDto;
@@ -12,6 +14,7 @@ import com.shop.auth.dto.RefreshTokenResponseDto;
 import com.shop.auth.dto.RegisterRequestDto;
 import com.shop.auth.dto.ResendOtpRequestDto;
 import com.shop.auth.dto.ResetPasswordRequestDto;
+import com.shop.auth.dto.UpdateUserStatusRequestDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.VerifyOtpRequestDto;
 
@@ -93,4 +96,47 @@ public interface AuthService {
      * @throws com.shop.auth.exception.ResourceNotFoundException if no user exists with the given ID
      */
     UserDto getUserById(Long userId);
+
+    // ── Admin user management ─────────────────────────────────────────────────
+
+    /**
+     * Admin-provisions a new user account, optionally assigning groups and direct roles
+     * on the spot. The account is created in ACTIVE state — no OTP verification required.
+     * The temporary password is encoded and seeded into the password history.
+     *
+     * @throws com.shop.auth.exception.EmailAlreadyExistsException if the email is already taken
+     */
+    UserDto adminCreateUser(AdminCreateUserRequestDto request);
+
+    /**
+     * Updates mutable profile fields (name, email, phone) for an existing user.
+     * Email changes are allowed but uniqueness is enforced.
+     * Existing sessions are NOT invalidated on a profile-only edit.
+     *
+     * @throws com.shop.auth.exception.ResourceNotFoundException if the user does not exist
+     * @throws com.shop.auth.exception.EmailAlreadyExistsException if the new email is already taken
+     */
+    UserDto adminUpdateUser(Long userId, AdminUpdateUserRequestDto request);
+
+    /**
+     * Changes a user's account status.
+     * SUSPENDED immediately invalidates all active tokens for that user.
+     * Admins cannot change their own status.
+     *
+     * @param requestingAdminId  the ID of the admin making the request (self-action guard)
+     * @throws com.shop.auth.exception.ResourceNotFoundException if the user does not exist
+     * @throws com.shop.auth.exception.BusinessException if the status is NEW or DELETED (system-managed),
+     *         or if the admin is trying to suspend themselves
+     */
+    UserDto updateUserStatus(Long userId, UpdateUserStatusRequestDto request, Long requestingAdminId);
+
+    /**
+     * Soft-deletes a user by setting their status to DELETED and invalidating all active tokens.
+     * This action is irreversible via the API. Admins cannot delete themselves.
+     *
+     * @param requestingAdminId the ID of the admin making the request (self-action guard)
+     * @throws com.shop.auth.exception.ResourceNotFoundException if the user does not exist
+     * @throws com.shop.auth.exception.BusinessException if the admin attempts self-deletion
+     */
+    void adminDeleteUser(Long userId, Long requestingAdminId);
 }

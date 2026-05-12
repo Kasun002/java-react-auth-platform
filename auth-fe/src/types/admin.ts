@@ -121,3 +121,24 @@ export interface UpdateGroupRequest {
   type: string;
   description?: string;
 }
+
+// ── User management requests ───────────────────────────────────────────────────
+
+export interface AdminCreateUserRequest {
+  name: string;
+  email: string;
+  temporaryPassword: string;
+  phone?: string;
+  groupIds: number[];
+  roleIds: number[];
+}
+
+export interface AdminUpdateUserRequest {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+export interface UpdateUserStatusRequest {
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+}

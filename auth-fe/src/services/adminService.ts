@@ -1,6 +1,8 @@
 import api from "../lib/axios";
 import type { ApiResponse, UserDto } from "../types/auth";
 import type {
+  AdminCreateUserRequest,
+  AdminUpdateUserRequest,
   AuditLogDto,
   RoleDto,
   DashboardStatsDto,
@@ -13,6 +15,7 @@ import type {
   UpdateRoleRequest,
   CreateGroupRequest,
   UpdateGroupRequest,
+  UpdateUserStatusRequest,
 } from "../types/admin";
 
 // ── Audit Log ─────────────────────────────────────────────────────────────────
@@ -117,3 +120,15 @@ export const getUsers = (params: { page: number; size: number }) =>
 
 export const getUserById = (userId: number) =>
   api.get<ApiResponse<UserDto>>(`/admin/users/${userId}`);
+
+export const createUser = (data: AdminCreateUserRequest) =>
+  api.post<ApiResponse<UserDto>>("/admin/users", data);
+
+export const updateUser = (userId: number, data: AdminUpdateUserRequest) =>
+  api.put<ApiResponse<UserDto>>(`/admin/users/${userId}`, data);
+
+export const updateUserStatus = (userId: number, data: UpdateUserStatusRequest) =>
+  api.patch<ApiResponse<UserDto>>(`/admin/users/${userId}/status`, data);
+
+export const deleteUser = (userId: number) =>
+  api.delete<void>(`/admin/users/${userId}`);
