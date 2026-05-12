@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PageMeta from "../../components/common/PageMeta";
 import Badge from "../../components/ui/badge/Badge";
 import {
@@ -9,7 +9,9 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { DocsIcon, CheckCircleIcon, AlertIcon, ErrorIcon } from "../../icons";
-import { AUDIT } from "../../temp_data/rbacData";
+import { getAuditLogs } from "../../services/adminService";
+import type { AuditLogDto } from "../../types/admin";
+import type { PageDto } from "../../types/admin";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,45 +27,82 @@ function formatDate(iso: string) {
 }
 
 function getInitials(name: string) {
-  return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
+
+const PAGE_SIZE = 50;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AuditPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
 
-  const sorted = useMemo(
-    () =>
-      [...AUDIT].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      ),
+  const [data, setData] = useState<PageDto<AuditLogDto> | null>(null);
+  // `initialLoad` drives the full-table spinner (first paint only).
+  // `fetching` drives the subtle dimming on subsequent refetches.
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Debounce the free-text search so we don't fire on every keystroke
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchLogs = useCallback(
+    (status: string, q: string, pageNum: number) => {
+      setFetching(true);
+      setError(null);
+      getAuditLogs({
+        page: pageNum,
+        size: PAGE_SIZE,
+        status: status !== "ALL" ? status : undefined,
+        q: q.trim() || undefined,
+      })
+        .then((res) => {
+          if (res.data.data) setData(res.data.data);
+        })
+        .catch(() => setError("Failed to load audit logs. Please try again."))
+        .finally(() => {
+          setFetching(false);
+          setInitialLoad(false);
+        });
+    },
     []
   );
 
-  const filtered = useMemo(
-    () =>
-      sorted.filter((a) => {
-        if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
-        if (query) {
-          const q = query.toLowerCase();
-          if (
-            !a.userName.toLowerCase().includes(q) &&
-            !a.action.toLowerCase().includes(q) &&
-            !a.details.toLowerCase().includes(q) &&
-            !a.resource.toLowerCase().includes(q)
-          )
-            return false;
-        }
-        return true;
-      }),
-    [sorted, statusFilter, query]
-  );
+  // Re-fetch when status filter or page changes immediately
+  useEffect(() => {
+    fetchLogs(statusFilter, query, page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, page]);
 
-  const successCount = AUDIT.filter((a) => a.status === "SUCCESS").length;
-  const failureCount = AUDIT.filter((a) => a.status === "FAILURE").length;
-  const warningCount = AUDIT.filter((a) => a.status === "WARNING").length;
+  // Debounce re-fetch when free-text query changes
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setPage(0);
+      fetchLogs(statusFilter, query, 0);
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const entries = data?.content ?? [];
+  const totalElements = data?.totalElements ?? 0;
+  const totalPages = data?.totalPages ?? 0;
+
+  // Summary counts from current page (server already filtered)
+  const successCount = entries.filter((a) => a.status === "SUCCESS").length;
+  const failureCount = entries.filter((a) => a.status === "FAILURE").length;
+  const warningCount = entries.filter((a) => a.status === "WARNING").length;
 
   return (
     <>
@@ -144,7 +183,10 @@ export default function AuditPage() {
           </span>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(0);
+            }}
             className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
           >
             <option value="ALL">All</option>
@@ -155,13 +197,20 @@ export default function AuditPage() {
         </div>
 
         <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 tabular-nums">
-          {filtered.length} of {AUDIT.length}
+          {fetching && !initialLoad ? "Updating…" : `${totalElements} total`}
         </span>
       </div>
 
+      {/* ── Error banner ── */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-800 dark:bg-error-900/20 dark:text-error-400">
+          {error}
+        </div>
+      )}
+
       {/* ── Table ── */}
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className={`overflow-x-auto transition-opacity duration-150 ${fetching && !initialLoad ? "opacity-50" : "opacity-100"}`}>
           <Table>
             <TableHeader>
               <TableRow className="border-b border-gray-100 dark:border-gray-800">
@@ -184,7 +233,16 @@ export default function AuditPage() {
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {filtered.length === 0 ? (
+              {initialLoad ? (
+                <TableRow>
+                  <TableCell className="px-6 py-12 text-center text-sm text-gray-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="size-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+                      Loading audit log…
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : entries.length === 0 ? (
                 <TableRow>
                   <TableCell className="px-6 py-12 text-center text-sm text-gray-400">
                     <div className="flex flex-col items-center gap-2">
@@ -194,7 +252,7 @@ export default function AuditPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((entry) => (
+                entries.map((entry) => (
                   <TableRow
                     key={entry.id}
                     className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
@@ -203,11 +261,11 @@ export default function AuditPage() {
                     <TableCell className="px-6 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400 text-xs font-semibold">
-                          {getInitials(entry.userName)}
+                          {getInitials(entry.actorName)}
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">
-                            {entry.userName.split(" ")[0]}
+                            {entry.actorName.split(" ")[0]}
                           </p>
                           <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
                             {entry.resource}
@@ -243,12 +301,12 @@ export default function AuditPage() {
 
                     {/* IP */}
                     <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400 hidden xl:table-cell">
-                      {entry.ipAddress}
+                      {entry.ipAddress ?? "—"}
                     </TableCell>
 
                     {/* Time */}
                     <TableCell className="px-6 py-3 text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap hidden md:table-cell">
-                      {formatDate(entry.timestamp)}
+                      {formatDate(entry.createdAt)}
                     </TableCell>
 
                     {/* Status */}
@@ -269,6 +327,31 @@ export default function AuditPage() {
             </TableBody>
           </Table>
         </div>
+
+        {/* ── Pagination ── */}
+        {!initialLoad && totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-100 px-6 py-3 dark:border-gray-800">
+            <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
+              Page {page + 1} of {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

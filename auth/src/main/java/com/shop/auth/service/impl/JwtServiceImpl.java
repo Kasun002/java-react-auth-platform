@@ -125,6 +125,11 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
+    public String extractName(String token) {
+        return extractClaim(token, claims -> claims.get("name", String.class));
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public List<String> extractGroups(String token) {
         return extractClaim(token, claims -> {
@@ -144,6 +149,7 @@ public class JwtServiceImpl implements JwtService {
                 .audience().add(AUDIENCE).and() // aud — prevents cross-service replay
                 .subject(user.getEmail())
                 .claim("userId", user.getId())
+                .claim("name", user.getName())
                 .claim("tokenType", tokenType.name())
                 .claim("permissions", computePermissions(user))
                 .claim("groups", computeGroupNames(user))

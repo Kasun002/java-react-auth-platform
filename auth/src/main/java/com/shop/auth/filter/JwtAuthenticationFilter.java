@@ -113,6 +113,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             // Step 6 — extract claims and build principal
             String email = jwtService.extractUsername(token);
+            String name = jwtService.extractName(token);
             List<String> permissions = jwtService.extractPermissions(token);
             List<String> groups = jwtService.extractGroups(token);
 
@@ -120,7 +121,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .map(SimpleGrantedAuthority::new)
                     .collect(Collectors.toList());
 
-            UserPrincipal principal = new UserPrincipal(userId, email, authorities, groups);
+            UserPrincipal principal = new UserPrincipal(userId, email, name, authorities, groups);
 
             var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

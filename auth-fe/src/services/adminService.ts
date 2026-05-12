@@ -1,6 +1,7 @@
 import api from "../lib/axios";
 import type { ApiResponse, UserDto } from "../types/auth";
 import type {
+  AuditLogDto,
   RoleDto,
   DashboardStatsDto,
   PageDto,
@@ -13,6 +14,15 @@ import type {
   CreateGroupRequest,
   UpdateGroupRequest,
 } from "../types/admin";
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+export const getAuditLogs = (params: {
+  page: number;
+  size: number;
+  status?: string;
+  q?: string;
+}) => api.get<ApiResponse<PageDto<AuditLogDto>>>("/admin/audit-logs", { params });
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 

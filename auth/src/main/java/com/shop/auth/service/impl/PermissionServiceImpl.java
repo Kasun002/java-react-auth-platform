@@ -15,7 +15,9 @@ import com.shop.auth.exception.ConflictException;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.repository.PermissionRepository;
 import com.shop.auth.repository.RoleRepository;
+import com.shop.auth.service.AuditHelper;
 import com.shop.auth.service.PermissionService;
+import com.shop.auth.utils.AuditStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,8 +28,11 @@ import lombok.extern.slf4j.Slf4j;
 @Transactional(readOnly = true)
 public class PermissionServiceImpl implements PermissionService {
 
+    private static final String RESOURCE = "PERMISSION";
+
     private final PermissionRepository permissionRepository;
     private final RoleRepository roleRepository;
+    private final AuditHelper auditHelper;
 
     @Override
     public List<PermissionDto> listAll() {
@@ -56,6 +61,8 @@ public class PermissionServiceImpl implements PermissionService {
 
         Permission saved = permissionRepository.save(permission);
         log.info("Permission created: id=[{}] code=[{}]", saved.getId(), saved.getCode());
+        auditHelper.record("PERMISSION_CREATED", RESOURCE, saved.getId().toString(),
+                "Created permission " + saved.getCode(), AuditStatus.SUCCESS);
         return toDto(saved);
     }
 
@@ -80,6 +87,8 @@ public class PermissionServiceImpl implements PermissionService {
 
         Permission saved = permissionRepository.save(permission);
         log.info("Permission updated: id=[{}] code=[{}]", saved.getId(), saved.getCode());
+        auditHelper.record("PERMISSION_UPDATED", RESOURCE, saved.getId().toString(),
+                "Updated permission " + saved.getCode(), AuditStatus.SUCCESS);
         return toDto(saved);
     }
 
@@ -99,6 +108,8 @@ public class PermissionServiceImpl implements PermissionService {
 
         permissionRepository.delete(permission);
         log.info("Permission deleted: id=[{}] code=[{}]", id, permission.getCode());
+        auditHelper.record("PERMISSION_DELETED", RESOURCE, id.toString(),
+                "Deleted permission " + permission.getCode(), AuditStatus.SUCCESS);
     }
 
     // ── Mapper ────────────────────────────────────────────────────────────────
