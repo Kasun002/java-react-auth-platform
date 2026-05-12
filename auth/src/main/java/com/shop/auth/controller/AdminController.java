@@ -45,7 +45,6 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -80,11 +79,9 @@ public class AdminController {
         // ══════════════════════════════════════════════════════════════════════════
 
         @Operation(summary = "List all permissions", description = "Returns all permission codes sorted by category and code.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Permission list returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Permission list returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/permissions")
         @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
         public ResponseEntity<ResponseDto<List<PermissionDto>>> listPermissions() {
@@ -99,13 +96,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Create permission", description = "Creates a new permission. Code is normalised to upper case.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "201", description = "Permission created"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Permission code already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "201", description = "Permission created")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Permission code already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/permissions")
         @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
         public ResponseEntity<ResponseDto<PermissionDto>> createPermission(
@@ -121,14 +116,12 @@ public class AdminController {
         }
 
         @Operation(summary = "Update permission", description = "Updates an existing permission.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Permission updated"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Permission code already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Permission updated")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Permission code already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PutMapping("/permissions/{id}")
         @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
         public ResponseEntity<ResponseDto<PermissionDto>> updatePermission(
@@ -145,13 +138,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Delete permission", description = "Deletes a permission. Returns 409 if the permission is still assigned to roles.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "Permission deleted"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Permission is still in use by roles", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "204", description = "Permission deleted")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Permission is still in use by roles", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @DeleteMapping("/permissions/{id}")
         @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
         public ResponseEntity<Void> deletePermission(
@@ -166,11 +157,9 @@ public class AdminController {
         // ══════════════════════════════════════════════════════════════════════════
 
         @Operation(summary = "List all roles", description = "Returns all roles with their assigned permissions.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Role list returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Role list returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/roles")
         @PreAuthorize("hasAuthority('ROLE_MANAGE')")
         public ResponseEntity<ResponseDto<List<RoleDto>>> listRoles() {
@@ -185,12 +174,10 @@ public class AdminController {
         }
 
         @Operation(summary = "Get role by ID", description = "Returns a single role with its permissions.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Role returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Role returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/roles/{id}")
         @PreAuthorize("hasAuthority('ROLE_MANAGE')")
         public ResponseEntity<ResponseDto<RoleDto>> getRole(
@@ -205,13 +192,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Create role", description = "Creates a new role with no permissions assigned.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "201", description = "Role created"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Role name already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "201", description = "Role created")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Role name already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/roles")
         @PreAuthorize("hasAuthority('ROLE_MANAGE')")
         public ResponseEntity<ResponseDto<RoleDto>> createRole(
@@ -227,14 +212,12 @@ public class AdminController {
         }
 
         @Operation(summary = "Update role", description = "Updates the name/description of an existing role.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Role updated"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Role name already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Role updated")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Role name already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PutMapping("/roles/{id}")
         @PreAuthorize("hasAuthority('ROLE_MANAGE')")
         public ResponseEntity<ResponseDto<RoleDto>> updateRole(
@@ -251,13 +234,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Delete role", description = "Deletes a role. Returns 409 if the role is still assigned to groups.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "Role deleted"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Role is still assigned to groups", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "204", description = "Role deleted")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Role is still assigned to groups", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @DeleteMapping("/roles/{id}")
         @PreAuthorize("hasAuthority('ROLE_MANAGE')")
         public ResponseEntity<Void> deleteRole(
@@ -268,13 +249,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Assign permission to role", description = "Adds a permission to a role. Idempotent — no error if already assigned.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Permission assigned — updated role returned"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Role or permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Permission assigned — updated role returned")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Role or permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/roles/{id}/permissions")
         @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
         public ResponseEntity<ResponseDto<RoleDto>> assignPermissionToRole(
@@ -291,12 +270,10 @@ public class AdminController {
         }
 
         @Operation(summary = "Remove permission from role", description = "Removes a permission from a role. No-op if not currently assigned.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "Permission removed"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Role or permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "204", description = "Permission removed")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Role or permission not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @DeleteMapping("/roles/{id}/permissions/{permissionId}")
         @PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
         public ResponseEntity<Void> removePermissionFromRole(
@@ -312,11 +289,9 @@ public class AdminController {
         // ══════════════════════════════════════════════════════════════════════════
 
         @Operation(summary = "List all groups", description = "Returns all user groups with their assigned roles.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Group list returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Group list returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/groups")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<ResponseDto<List<UserGroupDto>>> listGroups() {
@@ -331,12 +306,10 @@ public class AdminController {
         }
 
         @Operation(summary = "Get group by ID", description = "Returns a single group with its roles and permissions.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Group returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Group returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/groups/{id}")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<ResponseDto<UserGroupDto>> getGroup(
@@ -351,13 +324,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Create group", description = "Creates a new user group with no roles or members.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "201", description = "Group created"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Group name already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "201", description = "Group created")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Group name already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/groups")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<ResponseDto<UserGroupDto>> createGroup(
@@ -373,14 +344,12 @@ public class AdminController {
         }
 
         @Operation(summary = "Update group", description = "Updates the name, type, and description of an existing group.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Group updated"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Group name already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Group updated")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Group name already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PutMapping("/groups/{id}")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<ResponseDto<UserGroupDto>> updateGroup(
@@ -397,13 +366,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Delete group", description = "Deletes a group. Returns 409 if the group still has members.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "Group deleted"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "409", description = "Group still has members", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "204", description = "Group deleted")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Group still has members", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @DeleteMapping("/groups/{id}")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<Void> deleteGroup(
@@ -414,13 +381,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Assign role to group", description = "Adds a role to a group. Idempotent — no error if already assigned.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Role assigned — updated group returned"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Group or role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Role assigned — updated group returned")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Group or role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/groups/{id}/roles")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<ResponseDto<UserGroupDto>> assignRoleToGroup(
@@ -437,12 +402,10 @@ public class AdminController {
         }
 
         @Operation(summary = "Remove role from group", description = "Removes a role from a group. No-op if the role is not assigned.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "Role removed"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "Group or role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "204", description = "Role removed")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "Group or role not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @DeleteMapping("/groups/{id}/roles/{roleId}")
         @PreAuthorize("hasAuthority('GROUP_MANAGE')")
         public ResponseEntity<Void> removeRoleFromGroup(
@@ -458,12 +421,10 @@ public class AdminController {
         // ══════════════════════════════════════════════════════════════════════════
 
         @Operation(summary = "Get user group memberships", description = "Returns all groups the user currently belongs to.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Group list returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Group list returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/users/{userId}/groups")
         @PreAuthorize("hasAuthority('USER_GROUPS_MANAGE')")
         public ResponseEntity<ResponseDto<List<UserGroupDto>>> getUserGroups(
@@ -479,13 +440,11 @@ public class AdminController {
         }
 
         @Operation(summary = "Add user to group", description = "Assigns a user to a group. Idempotent — no error if already a member.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "User added to group"),
-                        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "User or group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "User added to group")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User or group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/users/{userId}/groups")
         @PreAuthorize("hasAuthority('USER_GROUPS_MANAGE')")
         public ResponseEntity<ResponseDto<Void>> addUserToGroup(
@@ -501,12 +460,10 @@ public class AdminController {
         }
 
         @Operation(summary = "Remove user from group", description = "Removes a user from a group. No-op if the user is not a member.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "204", description = "User removed from group"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "User or group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "204", description = "User removed from group")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User or group not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @DeleteMapping("/users/{userId}/groups/{groupId}")
         @PreAuthorize("hasAuthority('USER_GROUPS_MANAGE')")
         public ResponseEntity<Void> removeUserFromGroup(
@@ -523,12 +480,10 @@ public class AdminController {
 
         @Operation(summary = "Get user effective permissions", description = "Returns the complete set of permission codes a user holds — "
                         + "union of permissions from all group-assigned roles and direct role assignments.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "Permission set returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "Permission set returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/users/{userId}/permissions")
         @PreAuthorize("hasAuthority('USER_GROUPS_MANAGE')")
         public ResponseEntity<ResponseDto<Set<String>>> getUserEffectivePermissions(
@@ -549,11 +504,9 @@ public class AdminController {
 
         @Operation(summary = "List all users (paginated)", description = "Returns all users with their group, role and permission context. "
                         + "Passwords and security-sensitive fields are never included.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "User page returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "User page returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/users")
         @PreAuthorize("hasAuthority('USER_GROUPS_MANAGE')")
         public ResponseEntity<ResponseDto<PageDto<UserDto>>> getUsers(
@@ -569,12 +522,10 @@ public class AdminController {
         }
 
         @Operation(summary = "Get user by ID", description = "Returns a single user with their groups, roles, and effective permissions.")
-        @ApiResponses({
-                        @ApiResponse(responseCode = "200", description = "User returned"),
-                        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-                        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-        })
+        @ApiResponse(responseCode = "200", description = "User returned")
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @GetMapping("/users/{userId}")
         @PreAuthorize("hasAuthority('USER_GROUPS_MANAGE')")
         public ResponseEntity<ResponseDto<UserDto>> getUser(

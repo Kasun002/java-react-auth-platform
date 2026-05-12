@@ -22,7 +22,6 @@ import com.shop.auth.service.AdGroupMappingService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -41,79 +40,70 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AdAdminController {
 
-    private final AdGroupMappingService adGroupMappingService;
+        private final AdGroupMappingService adGroupMappingService;
 
-    @Operation(summary = "List all AD group mappings")
-    @GetMapping
-    @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
-    public ResponseEntity<ResponseDto<List<AdGroupMappingDto>>> listAll() {
-        ResponseDto<List<AdGroupMappingDto>> response = new ResponseDto<>();
-        response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setData(adGroupMappingService.listAll());
-        return ResponseEntity.ok(response);
-    }
+        @Operation(summary = "List all AD group mappings")
+        @GetMapping
+        @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
+        public ResponseEntity<ResponseDto<List<AdGroupMappingDto>>> listAll() {
+                ResponseDto<List<AdGroupMappingDto>> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setData(adGroupMappingService.listAll());
+                return ResponseEntity.ok(response);
+        }
 
-    @Operation(summary = "Get a single AD group mapping by ID")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Mapping found"),
-            @ApiResponse(responseCode = "404", description = "Mapping not found")
-    })
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
-    public ResponseEntity<ResponseDto<AdGroupMappingDto>> getById(@PathVariable Long id) {
-        ResponseDto<AdGroupMappingDto> response = new ResponseDto<>();
-        response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setData(adGroupMappingService.getById(id));
-        return ResponseEntity.ok(response);
-    }
+        @Operation(summary = "Get a single AD group mapping by ID")
+        @ApiResponse(responseCode = "200", description = "Mapping found")
+        @ApiResponse(responseCode = "404", description = "Mapping not found")
+        @GetMapping("/{id}")
+        @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
+        public ResponseEntity<ResponseDto<AdGroupMappingDto>> getById(@PathVariable Long id) {
+                ResponseDto<AdGroupMappingDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setData(adGroupMappingService.getById(id));
+                return ResponseEntity.ok(response);
+        }
 
-    @Operation(summary = "Create a manual AD group mapping", description = "Maps an Azure AD group (by its Object ID or LDAP CN) to a local UserGroup. "
-            +
-            "This overrides any auto-created mapping for the same AD group.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Mapping created"),
-            @ApiResponse(responseCode = "400", description = "Validation error"),
-            @ApiResponse(responseCode = "404", description = "Local UserGroup not found")
-    })
-    @PostMapping
-    @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
-    public ResponseEntity<ResponseDto<AdGroupMappingDto>> create(
-            @Valid @RequestBody CreateAdGroupMappingRequestDto request) {
-        ResponseDto<AdGroupMappingDto> response = new ResponseDto<>();
-        response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setMessage("AD group mapping created");
-        response.setData(adGroupMappingService.create(request));
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
+        @Operation(summary = "Create a manual AD group mapping", description = "Maps an Azure AD group (by its Object ID or LDAP CN) to a local UserGroup. "
+                        + "This overrides any auto-created mapping for the same AD group.")
+        @ApiResponse(responseCode = "201", description = "Mapping created")
+        @ApiResponse(responseCode = "400", description = "Validation error")
+        @ApiResponse(responseCode = "404", description = "Local UserGroup not found")
+        @PostMapping
+        @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
+        public ResponseEntity<ResponseDto<AdGroupMappingDto>> create(
+                        @Valid @RequestBody CreateAdGroupMappingRequestDto request) {
+                ResponseDto<AdGroupMappingDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setMessage("AD group mapping created");
+                response.setData(adGroupMappingService.create(request));
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        }
 
-    @Operation(summary = "Update the local group for an existing AD mapping", description = "Changes which local UserGroup an AD group maps to. "
-            +
-            "Automatically clears the auto-created flag.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Mapping updated"),
-            @ApiResponse(responseCode = "404", description = "Mapping or local UserGroup not found")
-    })
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
-    public ResponseEntity<ResponseDto<AdGroupMappingDto>> update(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateAdGroupMappingRequestDto request) {
-        ResponseDto<AdGroupMappingDto> response = new ResponseDto<>();
-        response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setMessage("AD group mapping updated");
-        response.setData(adGroupMappingService.update(id, request));
-        return ResponseEntity.ok(response);
-    }
+        @Operation(summary = "Update the local group for an existing AD mapping", description = "Changes which local UserGroup an AD group maps to. "
+                        +
+                        "Automatically clears the auto-created flag.")
+        @ApiResponse(responseCode = "200", description = "Mapping updated")
+        @ApiResponse(responseCode = "404", description = "Mapping or local UserGroup not found")
+        @PutMapping("/{id}")
+        @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
+        public ResponseEntity<ResponseDto<AdGroupMappingDto>> update(
+                        @PathVariable Long id,
+                        @Valid @RequestBody UpdateAdGroupMappingRequestDto request) {
+                ResponseDto<AdGroupMappingDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setMessage("AD group mapping updated");
+                response.setData(adGroupMappingService.update(id, request));
+                return ResponseEntity.ok(response);
+        }
 
-    @Operation(summary = "Delete an AD group mapping")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Mapping deleted"),
-            @ApiResponse(responseCode = "404", description = "Mapping not found")
-    })
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        adGroupMappingService.delete(id);
-        return ResponseEntity.noContent().build();
-    }
+        @Operation(summary = "Delete an AD group mapping")
+        @ApiResponse(responseCode = "204", description = "Mapping deleted")
+        @ApiResponse(responseCode = "404", description = "Mapping not found")
+        @DeleteMapping("/{id}")
+        @PreAuthorize("hasAuthority('AD_GROUP_MANAGE')")
+        public ResponseEntity<Void> delete(@PathVariable Long id) {
+                adGroupMappingService.delete(id);
+                return ResponseEntity.noContent().build();
+        }
 }
