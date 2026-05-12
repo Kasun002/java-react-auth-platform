@@ -6,18 +6,91 @@ metadata:
   labels:
     app: auth-service
 data:
-  # Non-sensitive application config only — secrets go in Secret
+  # ── Application ──────────────────────────────────────────────────────────────
   SPRING_APPLICATION_NAME: "auth"
+
+  # ── Database ─────────────────────────────────────────────────────────────────
   SPRING_JPA_HIBERNATE_DDL_AUTO: "none"
   SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: "org.hibernate.dialect.PostgreSQLDialect"
   SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: "true"
   SPRING_JPA_SHOW_SQL: "false"
+
+  # ── Flyway ───────────────────────────────────────────────────────────────────
   SPRING_FLYWAY_ENABLED: "true"
   SPRING_FLYWAY_LOCATIONS: "classpath:db/migration"
+
+  # ── Redis (token blacklist + OTP rate limiting) ───────────────────────────────
+  # Service DNS: redis.shop-platform.svc.cluster.local
+  REDIS_HOST: "auth-redis.shop-platform.svc.cluster.local"
+  REDIS_PORT: "6379"
+
+  # ── Actuator / health probes ─────────────────────────────────────────────────
   MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info"
   MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
   MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "never"
   SERVER_PORT: "8080"
-  # Service discovery — other microservices reference auth via this DNS
-  # Format: <service-name>.<namespace>.svc.cluster.local
+
+  # ── CORS ─────────────────────────────────────────────────────────────────────
+  # auth-fe nginx is the only browser-facing origin; auth-service is internal.
+  # Add staging/preview URLs here as needed.
+  CORS_ALLOWED_ORIGINS: "https://shop.example.com"
+
+  # ── JWT token lifetimes ───────────────────────────────────────────────────────
+  # Access: 15 minutes  |  Refresh: 7 days
+  APP_JWT_ACCESS_TOKEN_EXPIRY_MS: "900000"
+  APP_JWT_REFRESH_TOKEN_EXPIRY_MS: "604800000"
+
+  # ── Password policy (PCI-DSS 8.3.6 / NIST 800-63B) ──────────────────────────
+  APP_SECURITY_PASSWORD_HISTORY_COUNT: "12"
+  APP_SECURITY_PASSWORD_MAX_AGE_DAYS: "90"
+
+  # ── Password reset ───────────────────────────────────────────────────────────
+  # Must match the frontend domain so the reset link works.
+  PASSWORD_RESET_BASE_URL: "https://shop.example.com/reset-password"
+  APP_PASSWORD_RESET_TOKEN_TTL_MINUTES: "15"
+
+  # ── OTP ──────────────────────────────────────────────────────────────────────
+  APP_OTP_EXPIRY_MINUTES: "10"
+  APP_OTP_MAX_ATTEMPTS: "3"
+  APP_OTP_MAX_RESENDS_PER_HOUR: "3"
+
+  # ── Mail (SMTP) ───────────────────────────────────────────────────────────────
+  # Sensitive values (MAIL_PASSWORD) are in the Secret.
+  MAIL_HOST: "smtp.example.com"
+  MAIL_PORT: "587"
+  MAIL_USERNAME: "noreply@shop.com"
+
+  # ── AWS / SQS / SES (async OTP email delivery) ───────────────────────────────
+  # Sensitive values (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) are in the Secret.
+  AWS_REGION: "us-east-1"
+  OTP_EMAIL_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/ACCOUNT_ID/otp-email-queue"
+  SES_SENDER_EMAIL: "noreply@shop.com"
+  MESSAGING_CONSUMER_ENABLED: "true"
+
+  # ── Azure AD / OIDC ───────────────────────────────────────────────────────────
+  # Set app.ad.enabled=true and replace <TENANT_ID> / <CLIENT_ID> with real values.
+  # Sensitive values (AD_LDAP_PASSWORD) are in the Secret.
+  AD_ENABLED: "true"
+  AD_JWKS_URI: "https://login.microsoftonline.com/<TENANT_ID>/discovery/v2.0/keys"
+  AD_ISSUER: "https://login.microsoftonline.com/<TENANT_ID>/v2.0"
+  AD_AUDIENCE: "<CLIENT_ID>"
+  AD_UNMAPPED_GROUP_STRATEGY: "DEFAULT"
+  AD_DEFAULT_GROUP_NAME: "RETAIL_CUSTOMER"
+
+  # ── LDAP group sync ───────────────────────────────────────────────────────────
+  AD_LDAP_URL: "ldap://ldap-service.shop-platform.svc.cluster.local:389"
+  AD_LDAP_BASE: "dc=corp,dc=example,dc=com"
+  AD_LDAP_USER_DN: "cn=svc-ldap,ou=users,dc=corp,dc=example,dc=com"
+  AD_LDAP_GROUP_SEARCH_BASE: "ou=groups,dc=corp,dc=example,dc=com"
+  AD_LDAP_GROUP_SEARCH_FILTER: "(member={0})"
+  AD_LDAP_GROUP_ID_ATTR: "cn"
+  AD_LDAP_GROUP_NAME_ATTR: "cn"
+  AD_LDAP_USER_SEARCH_BASE: "ou=users,dc=corp,dc=example,dc=com"
+  AD_LDAP_USER_SEARCH_FILTER: "(mail={0})"
+
+  # ── Logging ───────────────────────────────────────────────────────────────────
+  LOGGING_LEVEL_COM_SHOP_AUTH: "INFO"
+  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: "INFO"
+
+  # ── Service discovery ────────────────────────────────────────────────────────
   AUTH_SERVICE_URL: "http://auth-service.shop-platform.svc.cluster.local:8080"

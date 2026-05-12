@@ -33,6 +33,14 @@ spec:
         - protocol: TCP
           port: 8080
     - from:
+        # auth-fe nginx proxies /api/ to auth-service
+        - podSelector:
+            matchLabels:
+              app: auth-fe
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
         # Allow other microservices in the same namespace (e.g. product-service)
         - podSelector:
             matchLabels:
@@ -62,6 +70,45 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    # Allow egress to Redis (token blacklist + OTP rate limiting)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow egress to SMTP relay (OTP / password-reset emails)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: smtp-relay
+      ports:
+        - protocol: TCP
+          port: 587
+    # Allow egress to in-cluster LDAP service (AD group sync)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ldap-service
+      ports:
+        - protocol: TCP
+          port: 389
+        - protocol: TCP
+          port: 636
+    # Allow HTTPS egress to external endpoints (Azure AD JWKS, AWS SQS/SES)
+    # ipBlock covers Microsoft login endpoint and AWS APIs; tighten if
+    # an egress proxy / service-mesh is available.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
     # Allow DNS resolution
     - to:
         - namespaceSelector:

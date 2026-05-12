@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-fe
+  namespace: shop-platform
+  labels:
+    app: auth-fe
+    version: v1
+spec:
+  replicas: 2                        # Minimum 2 for zero-downtime deployments
+  selector:
+    matchLabels:
+      app: auth-fe
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0              # Never kill a pod before the replacement is ready
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: auth-fe
+        version: v1
+    spec:
+      serviceAccountName: auth-fe-sa
+      automountServiceAccountToken: false
+
+      # ── Pod-level security context ─────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101               # nginx user in nginx:stable-alpine
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+
+      # ── Spread pods across nodes for HA ────────────────────────────────────
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - auth-fe
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: auth-fe
+          image: shop/auth-fe:1.0.0   # Never use :latest in production
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+
+          # ── Container-level security context ─────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # ── Resource limits — nginx is lightweight ─────────────────────────
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          # ── Health probes via nginx /health endpoint ───────────────────────
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6       # 5s + (6 * 5s) = 35s max startup
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 2
+
+          # ── Volume mounts ─────────────────────────────────────────────────
+          volumeMounts:
+            # nginx config from ConfigMap — overrides the image's nginx.conf
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            # nginx pid and temp dirs (readOnlyRootFilesystem requires these)
+            - name: nginx-tmp
+              mountPath: /tmp
+            # nginx cache
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            # nginx logs
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: auth-fe-nginx-config
+        - name: nginx-tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-logs
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 30

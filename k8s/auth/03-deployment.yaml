@@ -94,6 +94,36 @@ spec:
                 secretKeyRef:
                   name: auth-secret
                   key: SPRING_DATASOURCE_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: JWT_SECRET
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: REDIS_PASSWORD
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: MAIL_PASSWORD
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AD_LDAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secret
+                  key: AD_LDAP_PASSWORD
 
           # ── Health probes using Spring Actuator ───────────────────────────
           startupProbe:             # Gives app time to start before liveness kicks in

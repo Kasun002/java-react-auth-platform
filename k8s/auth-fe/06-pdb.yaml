@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-fe-pdb
+  namespace: shop-platform
+spec:
+  minAvailable: 1    # At least 1 pod must serve traffic during node maintenance
+  selector:
+    matchLabels:
+      app: auth-fe
