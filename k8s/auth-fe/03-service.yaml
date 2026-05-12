@@ -1,0 +1,18 @@
+# ClusterIP — traffic reaches auth-fe only through the Ingress controller.
+# Direct external access is blocked by NetworkPolicy.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-fe
+  namespace: shop-platform
+  labels:
+    app: auth-fe
+spec:
+  type: ClusterIP
+  selector:
+    app: auth-fe
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

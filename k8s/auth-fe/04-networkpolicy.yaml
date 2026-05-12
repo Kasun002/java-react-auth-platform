@@ -1,0 +1,57 @@
+# ── Rule 1: Allow ingress to auth-fe only from the Ingress controller ────────
+# The namespace-level default-deny in 05-networkpolicy.yaml (auth) already
+# blocks all traffic; this policy explicitly opens what auth-fe needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-fe-allow-ingress
+  namespace: shop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-fe
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Only the Ingress controller namespace may reach auth-fe
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# ── Rule 2: Allow auth-fe egress only to auth-service (API proxy) ─────────────
+# auth-fe nginx proxies /api/ to auth-service:8080.
+# DNS egress to kube-system is also required for k8s service discovery.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-fe-allow-egress
+  namespace: shop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-fe
+  policyTypes:
+    - Egress
+  egress:
+    # Allow proxy traffic to auth-service
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-service
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

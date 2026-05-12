@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-fe-nginx-config
+  namespace: shop-platform
+  labels:
+    app: auth-fe
+data:
+  # ── nginx.conf is mounted over /etc/nginx/nginx.conf ─────────────────────────
+  # This allows changing proxy targets or cache/security settings without
+  # rebuilding the Docker image.
+  nginx.conf: |
+    user  nginx;
+    worker_processes  auto;
+    error_log  /var/log/nginx/error.log warn;
+    pid  /tmp/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        client_body_temp_path  /tmp/nginx/client-body;
+        proxy_temp_path        /tmp/nginx/proxy;
+        fastcgi_temp_path      /tmp/nginx/fastcgi;
+        uwsgi_temp_path        /tmp/nginx/uwsgi;
+        scgi_temp_path         /tmp/nginx/scgi;
+
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent"';
+        access_log  /var/log/nginx/access.log  main;
+
+        sendfile        on;
+        tcp_nopush      on;
+        keepalive_timeout  65;
+        server_tokens   off;
+
+        gzip  on;
+        gzip_vary  on;
+        gzip_min_length  1024;
+        gzip_proxied  any;
+        gzip_comp_level  6;
+        gzip_types
+            text/plain text/css text/xml
+            application/json application/javascript
+            application/rss+xml image/svg+xml;
+
+        server {
+            listen       8080;
+            server_name  _;
+            root   /usr/share/nginx/html;
+            index  index.html;
+
+            add_header X-Frame-Options            "DENY"                            always;
+            add_header X-Content-Type-Options     "nosniff"                         always;
+            add_header Referrer-Policy            "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security  "max-age=31536000; includeSubDomains" always;
+
+            location = /health {
+                access_log  off;
+                return 200  "ok\n";
+                add_header  Content-Type text/plain;
+            }
+
+            # Proxy all /api/* calls to the auth-service ClusterIP
+            location /api/ {
+                proxy_pass         http://auth-service.shop-platform.svc.cluster.local:8080/;
+                proxy_http_version 1.1;
+                proxy_set_header   Host               $host;
+                proxy_set_header   X-Real-IP          $remote_addr;
+                proxy_set_header   X-Forwarded-For    $proxy_add_x_forwarded_for;
+                proxy_set_header   X-Forwarded-Proto  $scheme;
+                proxy_connect_timeout  10s;
+                proxy_read_timeout     30s;
+            }
+
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
+                expires     1y;
+                add_header  Cache-Control "public, immutable";
+                access_log  off;
+            }
+
+            location / {
+                try_files $uri $uri/ /index.html;
+                location = /index.html {
+                    add_header Cache-Control "no-store, no-cache, must-revalidate";
+                }
+            }
+        }
+    }
