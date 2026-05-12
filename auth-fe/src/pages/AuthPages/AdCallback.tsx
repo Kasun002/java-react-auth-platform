@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
@@ -38,7 +39,7 @@ export default function AdCallback() {
     }
     sessionStorage.removeItem("pkce_verifier");
 
-    const redirectUri = `${window.location.origin}/auth/callback`;
+    const redirectUri = `${globalThis.location.origin}/auth/callback`;
     const tokenUrl = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`;
 
     const body = new URLSearchParams({
@@ -49,16 +50,11 @@ export default function AdCallback() {
       code_verifier: verifier,
     });
 
-    fetch(tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Token exchange failed");
-        return res.json();
+    axios
+      .post(tokenUrl, body.toString(), {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
       })
-      .then(async (tokens) => {
+      .then(async ({ data: tokens }) => {
         const idToken: string = tokens.id_token;
         if (!idToken) throw new Error("No id_token in response");
 
