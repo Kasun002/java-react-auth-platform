@@ -10,8 +10,17 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { UserCircleIcon, GroupIcon } from "../../icons";
-import { getUsers, listGroups } from "../../services/adminService";
-import type { UserGroupDto } from "../../types/admin";
+import {
+  getUsers,
+  listGroups,
+  listRoles,
+  createUser,
+} from "../../services/adminService";
+import type {
+  AdminCreateUserRequest,
+  RoleDto,
+  UserGroupDto,
+} from "../../types/admin";
 import type { UserDto } from "../../types/auth";
 import Pagination from "../../utils/tblPagination";
 
@@ -82,12 +91,270 @@ function SkeletonRow() {
   );
 }
 
+// ── Create User Modal ─────────────────────────────────────────────────────────
+
+interface CreateUserModalProps {
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function CreateUserModal({ onClose, onCreated }: Readonly<CreateUserModalProps>) {
+  const [form, setForm] = useState<AdminCreateUserRequest>({
+    name: "",
+    email: "",
+    temporaryPassword: "",
+    phone: "",
+    groupIds: [],
+    roleIds: [],
+  });
+  const [groups, setGroups] = useState<UserGroupDto[]>([]);
+  const [roles, setRoles] = useState<RoleDto[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listGroups()
+      .then((r) => setGroups(r.data.data ?? []))
+      .catch(() => {});
+    listRoles()
+      .then((r) => setRoles(r.data.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  function toggle<T>(arr: T[], val: T): T[] {
+    return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await createUser({ ...form, phone: form.phone || undefined });
+      onCreated();
+      onClose();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message;
+      setError(msg ?? "Failed to create user. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            Create user
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+            {error && (
+              <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+                {error}
+              </div>
+            )}
+
+            {/* Profile fields */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                  Full name <span className="text-error-500">*</span>
+                </label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  placeholder="Jane Doe"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                  Email <span className="text-error-500">*</span>
+                </label>
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, email: e.target.value }))
+                  }
+                  placeholder="jane@corp.example.com"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                  Temporary password <span className="text-error-500">*</span>
+                </label>
+                <input
+                  required
+                  type="password"
+                  value={form.temporaryPassword}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      temporaryPassword: e.target.value,
+                    }))
+                  }
+                  placeholder="Min 8 chars, upper/lower/digit/symbol"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                  Phone
+                </label>
+                <input
+                  value={form.phone}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, phone: e.target.value }))
+                  }
+                  placeholder="+94771234567"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+                />
+              </div>
+            </div>
+
+            {/* Groups */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                Groups{" "}
+                <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <div className="max-h-36 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                {groups.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-gray-400">
+                    No groups available
+                  </p>
+                ) : (
+                  groups.map((g) => (
+                    <label
+                      key={g.id}
+                      className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.groupIds.includes(g.id)}
+                        onChange={() =>
+                          setForm((f) => ({
+                            ...f,
+                            groupIds: toggle(f.groupIds, g.id),
+                          }))
+                        }
+                        className="accent-brand-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+                          {g.name}
+                        </p>
+                        <p className="truncate text-xs text-gray-400">
+                          {g.description}
+                        </p>
+                      </div>
+                      <Badge color="light" size="sm">
+                        {g.type}
+                      </Badge>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Roles */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                Direct roles{" "}
+                <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <div className="max-h-36 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                {roles.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-gray-400">
+                    No roles available
+                  </p>
+                ) : (
+                  roles.map((r) => (
+                    <label
+                      key={r.id}
+                      className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.roleIds.includes(r.id)}
+                        onChange={() =>
+                          setForm((f) => ({
+                            ...f,
+                            roleIds: toggle(f.roleIds, r.id),
+                          }))
+                        }
+                        className="accent-brand-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-white/90 font-mono">
+                          {r.name}
+                        </p>
+                        <p className="truncate text-xs text-gray-400">
+                          {r.description}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-gray-400">
+                        {r.permissions.length} perm
+                        {r.permissions.length !== 1 ? "s" : ""}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? "Creating…" : "Create user"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 10;
 
 export default function UsersPage() {
   const navigate = useNavigate();
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Server-side pagination state
   const [page, setPage] = useState(0);
@@ -114,7 +381,7 @@ export default function UsersPage() {
       });
   }, []);
 
-  // Fetch page of users whenever page index changes
+  // Fetch page of users whenever page index or refreshKey changes
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -136,7 +403,7 @@ export default function UsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page]);
+  }, [page, refreshKey]);
 
   // Reset to page 0 when client-side filters change
   useEffect(() => {
@@ -184,7 +451,10 @@ export default function UsersPage() {
             {loading ? "Loading…" : `${totalElements} total users`}
           </p>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+        >
           <UserCircleIcon className="size-4" />
           Add user
         </button>
@@ -425,6 +695,17 @@ export default function UsersPage() {
           />
         )}
       </div>
+
+      {/* ── Create user modal ── */}
+      {createOpen && (
+        <CreateUserModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setPage(0);
+            setRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
     </>
   );
 }

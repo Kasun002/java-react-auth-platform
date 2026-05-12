@@ -11,8 +11,11 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -20,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.shop.auth.dto.AdminCreateUserRequestDto;
+import com.shop.auth.dto.AdminUpdateUserRequestDto;
 import com.shop.auth.dto.AssignGroupRequestDto;
 import com.shop.auth.dto.AssignPermissionToRoleRequestDto;
 import com.shop.auth.dto.AssignRoleToGroupRequestDto;
@@ -33,8 +38,10 @@ import com.shop.auth.dto.RoleDto;
 import com.shop.auth.dto.UpdateGroupRequestDto;
 import com.shop.auth.dto.UpdatePermissionRequestDto;
 import com.shop.auth.dto.UpdateRoleRequestDto;
+import com.shop.auth.dto.UpdateUserStatusRequestDto;
 import com.shop.auth.dto.UserDto;
 import com.shop.auth.dto.UserGroupDto;
+import com.shop.auth.security.UserPrincipal;
 import com.shop.auth.service.AuthService;
 import com.shop.auth.service.PermissionService;
 import com.shop.auth.service.RoleService;
@@ -536,5 +543,102 @@ public class AdminController {
                 response.setStatus(ResponseDto.Status.SUCCESS);
                 response.setData(data);
                 return ResponseEntity.ok(response);
+        }
+
+        @Operation(summary = "Create user (admin)", description = "Admin provisions a new user account in ACTIVE state. "
+                        + "Groups and direct roles can be assigned immediately. No OTP verification required.")
+        @ApiResponse(responseCode = "201", description = "User created")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Email already exists", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @PostMapping("/users")
+        @PreAuthorize("hasAuthority('USER_CREATE')")
+        public ResponseEntity<ResponseDto<UserDto>> createUser(
+                        @Valid @RequestBody AdminCreateUserRequestDto request) {
+                log.info("Admin: creating user email=[{}]", request.getEmail());
+                UserDto data = authService.adminCreateUser(request);
+
+                ResponseDto<UserDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setMessage("User created successfully");
+                response.setData(data);
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        }
+
+        @Operation(summary = "Update user (admin)", description = "Updates a user's name, email, and phone number. "
+                        + "Email uniqueness is enforced. Existing sessions are NOT invalidated.")
+        @ApiResponse(responseCode = "200", description = "User updated")
+        @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "409", description = "Email already taken", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @PutMapping("/users/{userId}")
+        @PreAuthorize("hasAuthority('USER_UPDATE')")
+        public ResponseEntity<ResponseDto<UserDto>> updateUser(
+                        @Parameter(description = "User ID") @PathVariable Long userId,
+                        @Valid @RequestBody AdminUpdateUserRequestDto request) {
+                log.info("Admin: updating user id=[{}]", userId);
+                UserDto data = authService.adminUpdateUser(userId, request);
+
+                ResponseDto<UserDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setMessage("User updated successfully");
+                response.setData(data);
+                return ResponseEntity.ok(response);
+        }
+
+        @Operation(summary = "Change user status (admin)", description = "Changes a user's account status. "
+                        + "SUSPENDED immediately invalidates all active tokens. "
+                        + "NEW and DELETED are system-managed and cannot be set via this endpoint. "
+                        + "Admins cannot change their own status.")
+        @ApiResponse(responseCode = "200", description = "Status updated")
+        @ApiResponse(responseCode = "400", description = "Validation failed or invalid status transition", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @PatchMapping("/users/{userId}/status")
+        @PreAuthorize("hasAuthority('USER_DEACTIVATE')")
+        public ResponseEntity<ResponseDto<UserDto>> updateUserStatus(
+                        @Parameter(description = "User ID") @PathVariable Long userId,
+                        @Valid @RequestBody UpdateUserStatusRequestDto request) {
+                Long requestingAdminId = resolveCurrentUserId();
+                log.info("Admin id=[{}]: changing status for user id=[{}] to=[{}]", requestingAdminId, userId, request.getStatus());
+                UserDto data = authService.updateUserStatus(userId, request, requestingAdminId);
+
+                ResponseDto<UserDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setMessage("User status updated to " + request.getStatus());
+                response.setData(data);
+                return ResponseEntity.ok(response);
+        }
+
+        @Operation(summary = "Delete user (admin)", description = "Soft-deletes a user by setting their status to DELETED and invalidating all active tokens. "
+                        + "This action is irreversible via the API. Admins cannot delete themselves.")
+        @ApiResponse(responseCode = "204", description = "User deleted")
+        @ApiResponse(responseCode = "400", description = "Self-deletion not allowed", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "403", description = "Insufficient authority", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @ApiResponse(responseCode = "404", description = "User not found", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+        @DeleteMapping("/users/{userId}")
+        @PreAuthorize("hasAuthority('USER_DEACTIVATE')")
+        public ResponseEntity<Void> deleteUser(
+                        @Parameter(description = "User ID") @PathVariable Long userId) {
+                Long requestingAdminId = resolveCurrentUserId();
+                log.info("Admin id=[{}]: soft-deleting user id=[{}]", requestingAdminId, userId);
+                authService.adminDeleteUser(userId, requestingAdminId);
+                return ResponseEntity.noContent().build();
+        }
+
+        // ── Private helpers ───────────────────────────────────────────────────
+
+        private Long resolveCurrentUserId() {
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                if (auth != null && auth.getPrincipal() instanceof UserPrincipal principal) {
+                        return principal.getId();
+                }
+                throw new com.shop.auth.exception.BusinessException(
+                        "Could not resolve authenticated user", org.springframework.http.HttpStatus.UNAUTHORIZED);
         }
 }

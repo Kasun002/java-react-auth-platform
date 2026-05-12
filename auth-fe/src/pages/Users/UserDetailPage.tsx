@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useAuth } from "../../context/AuthContext";
 import PageMeta from "../../components/common/PageMeta";
 import Badge from "../../components/ui/badge/Badge";
 import {
@@ -23,8 +24,11 @@ import {
   addUserToGroup,
   removeUserFromGroup,
   listGroups,
+  updateUser,
+  updateUserStatus,
+  deleteUser,
 } from "../../services/adminService";
-import type { UserGroupDto } from "../../types/admin";
+import type { AdminUpdateUserRequest, UserGroupDto } from "../../types/admin";
 import type { UserDto } from "../../types/auth";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,6 +115,117 @@ interface TabConfig {
   label: string;
   icon: React.ReactNode;
   count?: number;
+}
+
+// ── Edit User Modal ───────────────────────────────────────────────────────────
+
+interface EditUserModalProps {
+  user: UserDto;
+  onClose: () => void;
+  onSaved: (updated: UserDto) => void;
+}
+
+function EditUserModal({ user, onClose, onSaved }: EditUserModalProps) {
+  const [form, setForm] = useState<AdminUpdateUserRequest>({
+    name: user.name,
+    email: user.email,
+    phone: user.phone ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await updateUser(user.id, {
+        ...form,
+        phone: form.phone || undefined,
+      });
+      onSaved(res.data.data!);
+      onClose();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg ?? "Failed to update user. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+            Edit user
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-3">
+          {error && (
+            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+              {error}
+            </div>
+          )}
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+              Full name <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+              Email <span className="text-error-500">*</span>
+            </label>
+            <input
+              required
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+              Phone
+            </label>
+            <input
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="+94771234567"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+        </form>
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-6 py-4">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={(e) => handleSubmit(e as unknown as React.FormEvent)}
+            disabled={saving}
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Assign Group Modal ────────────────────────────────────────────────────────
@@ -249,8 +364,10 @@ function AssignGroupModal({
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
 
   const userId = Number(id);
+  const isSelf = currentUser?.id === userId;
 
   // User profile (from API)
   const [user, setUser] = useState<UserDto | null>(null);
@@ -267,6 +384,10 @@ export default function UserDetailPage() {
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [assignOpen, setAssignOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   // Load user profile
   useEffect(() => {
@@ -312,6 +433,37 @@ export default function UserDetailPage() {
 
   function refreshGroups() {
     getUserGroups(userId).then((res) => setGroups(res.data.data ?? []));
+  }
+
+  async function handleStatusChange(newStatus: "ACTIVE" | "INACTIVE" | "SUSPENDED") {
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const res = await updateUserStatus(userId, { status: newStatus });
+      setUser(res.data.data ?? null);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setActionError(msg ?? "Failed to update status.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await deleteUser(userId);
+      navigate("/users");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setActionError(msg ?? "Failed to delete user.");
+      setDeleteConfirm(false);
+    } finally {
+      setActionBusy(false);
+    }
   }
 
   // ── Loading state ────────────────────────────────────────────────────────
@@ -420,25 +572,88 @@ export default function UserDetailPage() {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-wrap gap-2 shrink-0">
-            <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors">
-              Edit
-            </button>
-            {user.status === "ACTIVE" ? (
-              <button className="rounded-lg border border-error-200 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors">
-                Suspend
-              </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {isSelf && (
+              <span className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-medium text-brand-600 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-400">
+                Your account
+              </span>
+            )}
+            {/* Edit — hidden for AD users (managed by Azure AD / LDAP) */}
+            {user.authProvider === "AZURE_AD" ? (
+              <span
+                title="Profile is managed by Azure AD — changes must be made in Active Directory"
+                className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-400 dark:border-gray-700 dark:text-gray-600"
+              >
+                Edit
+                <span className="rounded bg-warning-100 px-1 py-0.5 text-xs text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
+                  AD
+                </span>
+              </span>
             ) : (
-              <button className="rounded-lg border border-success-200 px-3 py-2 text-sm font-medium text-success-600 hover:bg-success-50 dark:border-success-500/30 dark:text-success-400 dark:hover:bg-success-500/10 transition-colors">
-                Activate
+              <button
+                onClick={() => setEditOpen(true)}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5 transition-colors"
+              >
+                Edit
               </button>
             )}
+
+            {/* Suspend / Activate — hidden for the currently logged-in admin (BE guards this too) */}
+            {!isSelf && user.status !== "DELETED" && user.status !== "NEW" && (
+              user.status === "ACTIVE" ? (
+                <button
+                  disabled={actionBusy}
+                  onClick={() => handleStatusChange("SUSPENDED")}
+                  className="rounded-lg border border-error-200 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors"
+                >
+                  {actionBusy ? "…" : "Suspend"}
+                </button>
+              ) : (
+                <button
+                  disabled={actionBusy}
+                  onClick={() => handleStatusChange("ACTIVE")}
+                  className="rounded-lg border border-success-200 px-3 py-2 text-sm font-medium text-success-600 hover:bg-success-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-success-500/30 dark:text-success-400 dark:hover:bg-success-500/10 transition-colors"
+                >
+                  {actionBusy ? "…" : "Activate"}
+                </button>
+              )
+            )}
+
             <button
               onClick={() => setAssignOpen(true)}
               className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
             >
               + Assign group
             </button>
+
+            {/* Delete — hidden for the currently logged-in admin (BE guards this too) */}
+            {!isSelf && user.status !== "DELETED" && (
+              deleteConfirm ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Confirm delete?</span>
+                  <button
+                    disabled={actionBusy}
+                    onClick={handleDelete}
+                    className="rounded-lg bg-error-500 px-3 py-2 text-sm font-medium text-white hover:bg-error-600 disabled:opacity-50 transition-colors"
+                  >
+                    {actionBusy ? "Deleting…" : "Yes, delete"}
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(false)}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setDeleteConfirm(true)}
+                  className="rounded-lg border border-error-200 px-3 py-2 text-sm font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors"
+                >
+                  Delete
+                </button>
+              )
+            )}
           </div>
         </div>
 
@@ -470,6 +685,16 @@ export default function UserDetailPage() {
           ))}
         </div>
       </div>
+
+      {/* ── Action error banner ── */}
+      {actionError && (
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-error-200 bg-error-50 px-5 py-2 text-sm text-error-700 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400">
+          {actionError}
+          <button onClick={() => setActionError(null)} className="ml-4 font-medium underline hover:no-underline">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Tab content ── */}
       <div className="mt-4 space-y-4">
@@ -795,6 +1020,15 @@ export default function UserDetailPage() {
           currentGroupIds={currentGroupIds}
           onClose={() => setAssignOpen(false)}
           onAssigned={refreshGroups}
+        />
+      )}
+
+      {/* Edit user modal — only for LOCAL users */}
+      {editOpen && user.authProvider !== "AZURE_AD" && (
+        <EditUserModal
+          user={user}
+          onClose={() => setEditOpen(false)}
+          onSaved={(updated) => setUser(updated)}
         />
       )}
     </>
