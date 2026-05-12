@@ -29,15 +29,18 @@ export default function SignInForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+
   const [error, setError] = useState<string | null>(
-    AD_ERROR_MESSAGES[searchParams.get("error") ?? ""] ?? null,
+    AD_ERROR_MESSAGES[searchParams.get("error") ?? ""] ?? null
   );
-  const success =
-    searchParams.get("verified") === "true"
-      ? "Email verified! Your account is active. Please sign in."
-      : searchParams.get("reset") === "true"
-      ? "Password reset successfully. Please sign in with your new password."
-      : null;
+
+  let success;
+  if (searchParams.get("verified") === "true") {
+    success = "Email verified! Your account is active. Please sign in.";
+  } else if (searchParams.get("reset") === "true") {
+    success =
+      '"Password reset successfully. Please sign in with your new password."';
+  }
   const [loading, setLoading] = useState(false);
   const [adLoading, setAdLoading] = useState(false);
 
@@ -69,7 +72,7 @@ export default function SignInForm() {
       const challenge = await generateCodeChallenge(verifier);
       sessionStorage.setItem("pkce_verifier", verifier);
 
-      const redirectUri = `${window.location.origin}/auth/callback`;
+      const redirectUri = `${globalThis.location.origin}/auth/callback`;
       const params = new URLSearchParams({
         response_type: "code",
         client_id: CLIENT_ID,
@@ -79,7 +82,7 @@ export default function SignInForm() {
         code_challenge_method: "S256",
       });
 
-      window.location.href = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/auth?${params}`;
+      globalThis.location.href = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/auth?${params}`;
     } catch {
       setError("Could not initiate AD sign-in. Please try again.");
       setAdLoading(false);
@@ -123,12 +126,11 @@ export default function SignInForm() {
                   <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   /* Keycloak logo mark */
-                  <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="16" cy="16" r="16" fill="#4A8FBF"/>
-                    <path d="M9 10h4l3 5-3 5H9l3-5-3-5z" fill="white"/>
-                    <path d="M16 10h4l3 5-3 5h-4l3-5-3-5z" fill="white" opacity="0.7"/>
-                    <circle cx="22" cy="10" r="2.5" fill="white"/>
-                  </svg>
+                  <img
+                    src="/images/icons/file-image-keycloak.svg"
+                    className="h-5"
+                    alt="Keycloak"
+                  />
                 )}
                 Sign in with Keycloak
               </button>
@@ -171,7 +173,7 @@ export default function SignInForm() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
-                    <span
+                    <button
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2"
                     >
@@ -180,7 +182,7 @@ export default function SignInForm() {
                       ) : (
                         <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400 size-5" />
                       )}
-                    </span>
+                    </button>
                   </div>
                 </div>
 
@@ -200,11 +202,7 @@ export default function SignInForm() {
                 </div>
 
                 <div>
-                  <Button
-                    className="w-full"
-                    size="sm"
-                    disabled={loading}
-                  >
+                  <Button className="w-full" size="sm" disabled={loading}>
                     {loading ? "Signing in..." : "Sign in"}
                   </Button>
                 </div>
