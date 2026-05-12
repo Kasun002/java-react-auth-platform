@@ -28,21 +28,28 @@ public class UserPrincipal implements UserDetails {
 
     private final Long userId;
     private final String email;
+    private final String name;
     private final Collection<GrantedAuthority> authorities;
     private final List<String> groups;
 
     public UserPrincipal(Long userId,
             String email,
+            String name,
             Collection<? extends GrantedAuthority> authorities,
             List<String> groups) {
         this.userId = userId;
         this.email = email;
+        this.name = name;
         this.authorities = Collections.unmodifiableList(new ArrayList<>(authorities));
         this.groups = Collections.unmodifiableList(groups);
     }
 
     public Long getId() {
         return userId;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public List<String> getGroups() {

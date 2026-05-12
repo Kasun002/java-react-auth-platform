@@ -24,7 +24,9 @@ import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserRepository;
+import com.shop.auth.service.AuditHelper;
 import com.shop.auth.service.UserGroupService;
+import com.shop.auth.utils.AuditStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,7 @@ public class UserGroupServiceImpl implements UserGroupService {
     private final UserGroupRepository userGroupRepository;
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
+    private final AuditHelper auditHelper;
 
     @Override
     public List<UserGroupDto> listAll() {
@@ -73,6 +76,8 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         UserGroup saved = userGroupRepository.save(group);
         log.info("Group created: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        auditHelper.record("GROUP_CREATED", "GROUP", saved.getId().toString(),
+                "Created group " + saved.getName(), AuditStatus.SUCCESS);
         return toDto(saved);
     }
 
@@ -97,6 +102,8 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         UserGroup saved = userGroupRepository.save(group);
         log.info("Group updated: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        auditHelper.record("GROUP_UPDATED", "GROUP", saved.getId().toString(),
+                "Updated group " + saved.getName(), AuditStatus.SUCCESS);
         return toDto(saved);
     }
 
@@ -115,6 +122,8 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         userGroupRepository.delete(group);
         log.info("Group deleted: id=[{}] name=[{}]", groupId, group.getName());
+        auditHelper.record("GROUP_DELETED", "GROUP", groupId.toString(),
+                "Deleted group " + group.getName(), AuditStatus.SUCCESS);
     }
 
     @Override
@@ -134,6 +143,9 @@ public class UserGroupServiceImpl implements UserGroupService {
             group.getRoles().add(role);
             userGroupRepository.save(group);
             log.info("Role [{}] assigned to group [{}]", role.getName(), group.getName());
+            auditHelper.record("ROLE_ASSIGNED", "GROUP", groupId.toString(),
+                    "Assigned role " + role.getName() + " to group " + group.getName(),
+                    AuditStatus.SUCCESS);
         } else {
             log.debug("Role [{}] already in group [{}] — no-op", role.getName(), group.getName());
         }
@@ -156,6 +168,9 @@ public class UserGroupServiceImpl implements UserGroupService {
         if (removed) {
             userGroupRepository.save(group);
             log.info("Role id=[{}] removed from group [{}]", roleId, group.getName());
+            auditHelper.record("ROLE_REMOVED", "GROUP", groupId.toString(),
+                    "Removed role id=" + roleId + " from group " + group.getName(),
+                    AuditStatus.SUCCESS);
         } else {
             log.debug("Role id=[{}] was not in group [{}] — no-op", roleId, group.getName());
         }
@@ -189,6 +204,9 @@ public class UserGroupServiceImpl implements UserGroupService {
             user.getGroups().add(group);
             userRepository.save(user);
             log.info("User id=[{}] added to group [{}]", userId, group.getName());
+            auditHelper.record("GROUP_MEMBER_ADDED", "USER", userId.toString(),
+                    "Added user " + user.getName() + " to group " + group.getName(),
+                    AuditStatus.SUCCESS);
         } else {
             log.debug("User id=[{}] already in group [{}] — no-op", userId, group.getName());
         }
@@ -209,6 +227,9 @@ public class UserGroupServiceImpl implements UserGroupService {
         if (removed) {
             userRepository.save(user);
             log.info("User id=[{}] removed from group id=[{}]", userId, groupId);
+            auditHelper.record("GROUP_MEMBER_REMOVED", "USER", userId.toString(),
+                    "Removed user " + user.getName() + " from group id=" + groupId,
+                    AuditStatus.SUCCESS);
         } else {
             log.debug("User id=[{}] was not in group id=[{}] — no-op", userId, groupId);
         }

@@ -19,7 +19,9 @@ import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.repository.PermissionRepository;
 import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
+import com.shop.auth.service.AuditHelper;
 import com.shop.auth.service.RoleService;
+import com.shop.auth.utils.AuditStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,7 @@ public class RoleServiceImpl implements RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final UserGroupRepository userGroupRepository;
+    private final AuditHelper auditHelper;
 
     @Override
     public List<RoleDto> listAll() {
@@ -68,6 +71,8 @@ public class RoleServiceImpl implements RoleService {
 
         Role saved = roleRepository.save(role);
         log.info("Role created: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        auditHelper.record("ROLE_CREATED", "ROLE", saved.getId().toString(),
+                "Created role " + saved.getName(), AuditStatus.SUCCESS);
         return toDto(saved);
     }
 
@@ -91,6 +96,8 @@ public class RoleServiceImpl implements RoleService {
 
         Role saved = roleRepository.save(role);
         log.info("Role updated: id=[{}] name=[{}]", saved.getId(), saved.getName());
+        auditHelper.record("ROLE_UPDATED", "ROLE", saved.getId().toString(),
+                "Updated role " + saved.getName(), AuditStatus.SUCCESS);
         return toDto(saved);
     }
 
@@ -109,6 +116,8 @@ public class RoleServiceImpl implements RoleService {
 
         roleRepository.delete(role);
         log.info("Role deleted: id=[{}] name=[{}]", roleId, role.getName());
+        auditHelper.record("ROLE_DELETED", "ROLE", roleId.toString(),
+                "Deleted role " + role.getName(), AuditStatus.SUCCESS);
     }
 
     @Override
@@ -128,6 +137,9 @@ public class RoleServiceImpl implements RoleService {
             role.getPermissions().add(permission);
             roleRepository.save(role);
             log.info("Permission [{}] assigned to role [{}]", permission.getCode(), role.getName());
+            auditHelper.record("PERMISSION_ASSIGNED", "ROLE", roleId.toString(),
+                    "Assigned permission " + permission.getCode() + " to role " + role.getName(),
+                    AuditStatus.SUCCESS);
         } else {
             log.debug("Permission [{}] already assigned to role [{}] — no-op", permission.getCode(), role.getName());
         }
@@ -150,6 +162,9 @@ public class RoleServiceImpl implements RoleService {
         if (removed) {
             roleRepository.save(role);
             log.info("Permission id=[{}] removed from role [{}]", permissionId, role.getName());
+            auditHelper.record("PERMISSION_REMOVED", "ROLE", roleId.toString(),
+                    "Removed permission id=" + permissionId + " from role " + role.getName(),
+                    AuditStatus.SUCCESS);
         } else {
             log.debug("Permission id=[{}] was not assigned to role [{}] — no-op", permissionId, role.getName());
         }

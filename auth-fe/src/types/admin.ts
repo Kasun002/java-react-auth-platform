@@ -1,3 +1,18 @@
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+export interface AuditLogDto {
+  id: number;
+  actorId: number;
+  actorName: string;
+  action: string;
+  resource: string;
+  resourceId: string | null;
+  details: string | null;
+  ipAddress: string | null;
+  status: "SUCCESS" | "WARNING" | "FAILURE";
+  createdAt: string;
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export interface DashboardStatsDto {

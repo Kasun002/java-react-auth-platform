@@ -38,4 +38,7 @@ public interface JwtService {
 
     /** Extracts the {@code iat} (issued-at) claim — used for user-level session invalidation. */
     Date extractIssuedAt(String token);
+
+    /** Extracts the {@code name} claim — used to populate the audit log actor name without a DB lookup. */
+    String extractName(String token);
 }

@@ -15,7 +15,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,29 +38,29 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AdAuthController {
 
-    private final AdAuthService adAuthService;
+        private final AdAuthService adAuthService;
 
-    @Operation(summary = "Exchange an Azure AD ID token for a service JWT pair", description = "Validates the OIDC ID token issued by Azure AD (or Keycloak in dev), "
-            +
-            "provisions the user on first login, syncs LDAP group memberships, " +
-            "and returns an access + refresh token pair.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Login successful", content = @Content(schema = @Schema(implementation = LoginResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Validation error — idToken is blank"),
-            @ApiResponse(responseCode = "401", description = "Invalid, expired, or untrusted ID token"),
-            @ApiResponse(responseCode = "503", description = "AD login feature disabled on this server")
-    })
-    @PostMapping("/login")
-    public ResponseEntity<ResponseDto<LoginResponseDto>> adLogin(
-            @Valid @RequestBody AdLoginRequestDto request) {
+        @Operation(summary = "Exchange an Azure AD ID token for a service JWT pair", description = "Validates the OIDC ID token issued by Azure AD (or Keycloak in dev), "
+                        +
+                        "provisions the user on first login, syncs LDAP group memberships, " +
+                        "and returns an access + refresh token pair.")
 
-        log.debug("AD login request received");
-        LoginResponseDto loginResponse = adAuthService.adLogin(request);
+        @ApiResponse(responseCode = "200", description = "Login successful", content = @Content(schema = @Schema(implementation = LoginResponseDto.class)))
+        @ApiResponse(responseCode = "400", description = "Validation error — idToken is blank")
+        @ApiResponse(responseCode = "401", description = "Invalid, expired, or untrusted ID token")
+        @ApiResponse(responseCode = "503", description = "AD login feature disabled on this server")
 
-        ResponseDto<LoginResponseDto> response = new ResponseDto<>();
-        response.setStatus(ResponseDto.Status.SUCCESS);
-        response.setMessage("AD login successful");
-        response.setData(loginResponse);
-        return ResponseEntity.ok(response);
-    }
+        @PostMapping("/login")
+        public ResponseEntity<ResponseDto<LoginResponseDto>> adLogin(
+                        @Valid @RequestBody AdLoginRequestDto request) {
+
+                log.debug("AD login request received");
+                LoginResponseDto loginResponse = adAuthService.adLogin(request);
+
+                ResponseDto<LoginResponseDto> response = new ResponseDto<>();
+                response.setStatus(ResponseDto.Status.SUCCESS);
+                response.setMessage("AD login successful");
+                response.setData(loginResponse);
+                return ResponseEntity.ok(response);
+        }
 }

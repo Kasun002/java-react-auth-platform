@@ -14,7 +14,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -49,11 +48,9 @@ public class DashboardController {
             + "user-status and auth-provider breakdowns, per-group member counts, "
             + "permissions by category, and the 10 most-recent login events. "
             + "All data is read-only. Per PCI-DSS v4 Req 7.2 — caller must hold DASHBOARD_VIEW authority.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Dashboard statistics returned"),
-            @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class))),
-            @ApiResponse(responseCode = "403", description = "Insufficient authority — DASHBOARD_VIEW required", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
-    })
+    @ApiResponse(responseCode = "200", description = "Dashboard statistics returned")
+    @ApiResponse(responseCode = "401", description = "Missing or invalid token", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
+    @ApiResponse(responseCode = "403", description = "Insufficient authority — DASHBOARD_VIEW required", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
     @GetMapping("/stats")
     @PreAuthorize("hasAuthority('DASHBOARD_VIEW')")
     public ResponseEntity<ResponseDto<DashboardStatsDto>> getStats() {
