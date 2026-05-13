@@ -78,7 +78,14 @@ public class UserGroupServiceImpl implements UserGroupService {
         group.setType(request.getType().trim());
         group.setDescription(request.getDescription());
 
+        // Persist first so Hibernate initialises the PersistentSet on the managed entity
+        // adding to a plain HashSet on a transient entity is dropped when JPA replaces
+        // it with an empty PersistentSet during persist().
         UserGroup saved = userGroupRepository.save(group);
+
+        for (Long roleId : request.getRoleIds()) {
+            roleRepository.findById(roleId).ifPresent(r -> saved.getRoles().add(r));
+        }
         log.info("Group created: id=[{}] name=[{}]", saved.getId(), saved.getName());
         auditHelper.record("GROUP_CREATED", "GROUP", saved.getId().toString(),
                 "Created group " + saved.getName(), AuditStatus.SUCCESS);
@@ -103,6 +110,12 @@ public class UserGroupServiceImpl implements UserGroupService {
         group.setName(name);
         group.setType(request.getType().trim());
         group.setDescription(request.getDescription());
+
+        // Full replacement of role assignments
+        group.getRoles().clear();
+        for (Long roleId : request.getRoleIds()) {
+            roleRepository.findById(roleId).ifPresent(r -> group.getRoles().add(r));
+        }
 
         UserGroup saved = userGroupRepository.save(group);
         log.info("Group updated: id=[{}] name=[{}]", saved.getId(), saved.getName());

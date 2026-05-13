@@ -103,23 +103,27 @@ export interface UpdatePermissionRequest {
 export interface CreateRoleRequest {
   name: string;
   description?: string;
+  permissionIds: number[];
 }
 
 export interface UpdateRoleRequest {
   name: string;
   description?: string;
+  permissionIds: number[];
 }
 
 export interface CreateGroupRequest {
   name: string;
   type: string;
   description?: string;
+  roleIds: number[];
 }
 
 export interface UpdateGroupRequest {
   name: string;
   type: string;
   description?: string;
+  roleIds: number[];
 }
 
 // ── User management requests ───────────────────────────────────────────────────

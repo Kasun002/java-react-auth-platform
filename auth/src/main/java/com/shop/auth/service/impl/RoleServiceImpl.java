@@ -69,7 +69,15 @@ public class RoleServiceImpl implements RoleService {
         role.setDescription(request.getDescription());
         role.setPermissions(new HashSet<>());
 
+        // Persist first so Hibernate initialises the PersistentSet on the managed entity
+        // adding to a plain HashSet on a transient entity is dropped when JPA replaces
+        // it with an empty PersistentSet during persist().
         Role saved = roleRepository.save(role);
+
+        for (Long permId : request.getPermissionIds()) {
+            permissionRepository.findById(permId).ifPresent(p -> saved.getPermissions().add(p));
+        }
+
         log.info("Role created: id=[{}] name=[{}]", saved.getId(), saved.getName());
         auditHelper.record("ROLE_CREATED", "ROLE", saved.getId().toString(),
                 "Created role " + saved.getName(), AuditStatus.SUCCESS);
@@ -93,6 +101,12 @@ public class RoleServiceImpl implements RoleService {
 
         role.setName(name);
         role.setDescription(request.getDescription());
+
+        // Full replacement of permission assignments
+        role.getPermissions().clear();
+        for (Long permId : request.getPermissionIds()) {
+            permissionRepository.findById(permId).ifPresent(p -> role.getPermissions().add(p));
+        }
 
         Role saved = roleRepository.save(role);
         log.info("Role updated: id=[{}] name=[{}]", saved.getId(), saved.getName());

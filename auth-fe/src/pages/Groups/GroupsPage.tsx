@@ -11,12 +11,18 @@ import {
 } from "../../components/ui/table";
 import { GroupIcon } from "../../icons";
 import {
-  listGroups,
   createGroup,
-  updateGroup,
   deleteGroup,
+  listGroups,
+  listRoles,
+  updateGroup,
 } from "../../services/adminService";
-import type { UserGroupDto, CreateGroupRequest, UpdateGroupRequest } from "../../types/admin";
+import type {
+  CreateGroupRequest,
+  RoleDto,
+  UpdateGroupRequest,
+  UserGroupDto,
+} from "../../types/admin";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,12 +52,28 @@ interface GroupModalProps {
   onSaved: (g: UserGroupDto) => void;
 }
 
-function GroupModal({ initial, onClose, onSaved }: GroupModalProps) {
+function GroupModal({ initial, onClose, onSaved }: Readonly<GroupModalProps>) {
   const [name, setName] = useState(initial?.name ?? "");
   const [type, setType] = useState(initial?.type ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>(
+    initial?.roles.map((r) => r.id) ?? []
+  );
+  const [availableRoles, setAvailableRoles] = useState<RoleDto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listRoles()
+      .then((res) => setAvailableRoles(res.data.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  function toggleRole(id: number) {
+    setSelectedRoleIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,11 +81,21 @@ function GroupModal({ initial, onClose, onSaved }: GroupModalProps) {
     setError(null);
     try {
       if (initial) {
-        const req: UpdateGroupRequest = { name, type, description };
+        const req: UpdateGroupRequest = {
+          name,
+          type,
+          description,
+          roleIds: selectedRoleIds,
+        };
         const res = await updateGroup(initial.id, req);
         onSaved(res.data.data!);
       } else {
-        const req: CreateGroupRequest = { name, type, description };
+        const req: CreateGroupRequest = {
+          name,
+          type,
+          description,
+          roleIds: selectedRoleIds,
+        };
         const res = await createGroup(req);
         onSaved(res.data.data!);
       }
@@ -77,60 +109,112 @@ function GroupModal({ initial, onClose, onSaved }: GroupModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+      <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
           <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
             {initial ? "Edit group" : "New group"}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            ✕
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-          {error && (
-            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
-              {error}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+            {error && (
+              <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <div className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Name <span className="text-error-500">*</span>
+              </div>
+              <input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. OPERATIONS_TEAM"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+              />
             </div>
-          )}
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Name <span className="text-error-500">*</span>
-            </label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. OPERATIONS_TEAM"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
+            <div>
+              <div className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Type <span className="text-error-500">*</span>
+              </div>
+              <input
+                required
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                placeholder="e.g. STAFF"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+              />
+            </div>
+
+            <div>
+              <div className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Description
+              </div>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description of this group…"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+              />
+            </div>
+
+            {/* Role assignment */}
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Roles{" "}
+                <span className="text-gray-400 font-normal">
+                  (optional — users inherit permissions from these roles)
+                </span>
+              </label>
+              <div className="max-h-44 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                {availableRoles.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-gray-400">
+                    No roles available
+                  </p>
+                ) : (
+                  availableRoles.map((r) => (
+                    <label
+                      key={r.id}
+                      className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedRoleIds.includes(r.id)}
+                        onChange={() => toggleRole(r.id)}
+                        className="accent-brand-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium font-mono text-gray-800 dark:text-white/90">
+                          {r.name}
+                        </p>
+                        {r.description && (
+                          <p className="truncate text-xs text-gray-400">
+                            {r.description}
+                          </p>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-xs text-gray-400">
+                        {r.permissions.length} perm
+                        {r.permissions.length ? "" : "s"}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Type <span className="text-error-500">*</span>
-            </label>
-            <input
-              required
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              placeholder="e.g. STAFF"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Description
-            </label>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description of this group…"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -143,7 +227,7 @@ function GroupModal({ initial, onClose, onSaved }: GroupModalProps) {
               disabled={saving}
               className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {saving ? "Saving…" : initial ? "Save changes" : "Create"}
+              {saving ? "Saving…" : <>{initial ? "Save changes" : "Create"}</>}
             </button>
           </div>
         </form>
@@ -176,7 +260,10 @@ export default function GroupsPage() {
 
   // Derive types dynamically from loaded groups
   const types = useMemo(
-    () => [...new Set(groups.map((g) => g.type))].sort(),
+    () =>
+      [...new Set(groups.map((g) => g.type))].sort((a, b) =>
+        a.localeCompare(b)
+      ),
     [groups]
   );
 
@@ -233,7 +320,8 @@ export default function GroupsPage() {
 
   async function handleDelete(g: UserGroupDto, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!window.confirm(`Delete group "${g.name}"? This cannot be undone.`)) return;
+    if (!globalThis.confirm(`Delete group "${g.name}"? This cannot be undone.`))
+      return;
     setDeleteError(null);
     try {
       await deleteGroup(g.id);
@@ -257,7 +345,8 @@ export default function GroupsPage() {
             Groups
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {groups.length} groups &middot; {types.length} type{types.length !== 1 ? "s" : ""}
+            {groups.length} groups &middot; {types.length} type
+            {types.length ? "" : "s"}
           </p>
         </div>
         <button
@@ -273,7 +362,12 @@ export default function GroupsPage() {
       {deleteError && (
         <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
           {deleteError}
-          <button onClick={() => setDeleteError(null)} className="ml-3 text-xs underline">Dismiss</button>
+          <button
+            onClick={() => setDeleteError(null)}
+            className="ml-3 text-xs underline"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -328,106 +422,113 @@ export default function GroupsPage() {
           <div className="flex items-center justify-center py-16 text-sm text-gray-400">
             Loading groups…
           </div>
-        ) : error ? (
-          <div className="flex items-center justify-center py-16 text-sm text-error-600 dark:text-error-400">
-            {error}
-          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-gray-100 dark:border-gray-800">
-                  {[
-                    { label: "Group", className: "" },
-                    { label: "Type", className: "w-32" },
-                    { label: "Roles", className: "w-24 text-right" },
-                    { label: "Permissions", className: "w-32 text-right hidden lg:table-cell" },
-                    { label: "", className: "w-24" },
-                  ].map(({ label, className }) => (
-                    <TableCell
-                      key={label || "_actions"}
-                      isHeader
-                      className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 ${className}`}
-                    >
-                      {label}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell className="px-6 py-12 text-center text-sm text-gray-400 dark:text-gray-500">
-                      <div className="flex flex-col items-center gap-2">
-                        <GroupIcon className="size-8 text-gray-300 dark:text-gray-600" />
-                        No groups match the current filters
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((g) => (
-                    <TableRow
-                      key={g.id}
-                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer transition-colors"
-                      onClick={() => navigate(`/groups/${g.id}`)}
-                    >
-                      {/* Group name + description */}
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                            <GroupIcon className="size-4 text-gray-500 dark:text-gray-400" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                              {g.name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
-                              {g.description}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Type */}
-                      <TableCell className="px-6 py-3">
-                        <Badge color={typeColor(g.type)} size="sm">
-                          {g.type}
-                        </Badge>
-                      </TableCell>
-
-                      {/* Roles */}
-                      <TableCell className="px-6 py-3 text-right text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">
-                        {g.roles.length}
-                      </TableCell>
-
-                      {/* Permissions */}
-                      <TableCell className="px-6 py-3 text-right text-sm text-gray-600 dark:text-gray-400 tabular-nums hidden lg:table-cell">
-                        {g.permissionCount}
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={(e) => openEdit(g, e)}
-                            className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/5 transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={(e) => handleDelete(g, e)}
-                            className="rounded px-2 py-1 text-xs font-medium text-error-500 hover:text-error-700 hover:bg-error-50 dark:hover:bg-error-500/10 transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </TableCell>
+          <>
+            {error ? (
+              <div className="flex items-center justify-center py-16 text-sm text-error-600 dark:text-error-400">
+                {error}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-gray-100 dark:border-gray-800">
+                      {[
+                        { label: "Group", className: "" },
+                        { label: "Type", className: "w-32" },
+                        { label: "Roles", className: "w-24 text-right" },
+                        {
+                          label: "Permissions",
+                          className: "w-32 text-right hidden lg:table-cell",
+                        },
+                        { label: "", className: "w-24" },
+                      ].map(({ label, className }) => (
+                        <TableCell
+                          key={label || "_actions"}
+                          isHeader
+                          className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 ${className}`}
+                        >
+                          {label}
+                        </TableCell>
+                      ))}
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {filtered.length === 0 ? (
+                      <TableRow>
+                        <TableCell className="px-6 py-12 text-center text-sm text-gray-400 dark:text-gray-500">
+                          <div className="flex flex-col items-center gap-2">
+                            <GroupIcon className="size-8 text-gray-300 dark:text-gray-600" />
+                            No groups match the current filters
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filtered.map((g) => (
+                        <TableRow
+                          key={g.id}
+                          className="hover:bg-gray-50 dark:hover:bg-white/[0.02] cursor-pointer transition-colors"
+                          onClick={() => navigate(`/groups/${g.id}`)}
+                        >
+                          {/* Group name + description */}
+                          <TableCell className="px-6 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                                <GroupIcon className="size-4 text-gray-500 dark:text-gray-400" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-800 dark:text-white/90">
+                                  {g.name}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
+                                  {g.description}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          {/* Type */}
+                          <TableCell className="px-6 py-3">
+                            <Badge color={typeColor(g.type)} size="sm">
+                              {g.type}
+                            </Badge>
+                          </TableCell>
+
+                          {/* Roles */}
+                          <TableCell className="px-6 py-3 text-right text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">
+                            {g.roles.length}
+                          </TableCell>
+
+                          {/* Permissions */}
+                          <TableCell className="px-6 py-3 text-right text-sm text-gray-600 dark:text-gray-400 tabular-nums hidden lg:table-cell">
+                            {g.permissionCount}
+                          </TableCell>
+
+                          {/* Actions */}
+                          <TableCell className="px-6 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={(e) => openEdit(g, e)}
+                                className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/5 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={(e) => handleDelete(g, e)}
+                                className="rounded px-2 py-1 text-xs font-medium text-error-500 hover:text-error-700 hover:bg-error-50 dark:hover:bg-error-500/10 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </>
         )}
       </div>
 

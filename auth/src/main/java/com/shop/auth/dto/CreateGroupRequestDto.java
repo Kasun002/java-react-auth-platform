@@ -1,5 +1,8 @@
 package com.shop.auth.dto;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -22,4 +25,7 @@ public class CreateGroupRequestDto {
     @Size(max = 500, message = "description must be at most 500 characters")
     @Schema(description = "Human-readable description of the group", example = "Operations department users")
     private String description;
+
+    @Schema(description = "IDs of roles to assign to this group. Leave empty for no roles.")
+    private List<Long> roleIds = new ArrayList<>();
 }
