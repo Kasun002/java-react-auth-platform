@@ -19,6 +19,9 @@ import com.shop.auth.entity.Permission;
 import com.shop.auth.entity.Role;
 import com.shop.auth.entity.User;
 import com.shop.auth.entity.UserGroup;
+import org.springframework.http.HttpStatus;
+
+import com.shop.auth.exception.BusinessException;
 import com.shop.auth.exception.ConflictException;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.repository.RoleRepository;
@@ -27,6 +30,7 @@ import com.shop.auth.repository.UserRepository;
 import com.shop.auth.service.AuditHelper;
 import com.shop.auth.service.UserGroupService;
 import com.shop.auth.utils.AuditStatus;
+import com.shop.auth.utils.AuthProvider;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -194,6 +198,13 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        if (user.getAuthProvider() == AuthProvider.AZURE_AD) {
+            throw new BusinessException(
+                    "Group memberships of Azure AD users are managed in Active Directory — changes must be made in AD/Keycloak.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
         UserGroup group = userGroupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group", groupId));
 
@@ -219,6 +230,13 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        if (user.getAuthProvider() == AuthProvider.AZURE_AD) {
+            throw new BusinessException(
+                    "Group memberships of Azure AD users are managed in Active Directory — changes must be made in AD/Keycloak.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
         if (!userGroupRepository.existsById(groupId)) {
             throw new ResourceNotFoundException("Group", groupId);
         }

@@ -130,7 +130,6 @@ export interface AdminCreateUserRequest {
   temporaryPassword: string;
   phone?: string;
   groupIds: number[];
-  roleIds: number[];
 }
 
 export interface AdminUpdateUserRequest {
