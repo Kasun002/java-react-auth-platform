@@ -1,6 +1,6 @@
 # java-react-auth-platform
 
-Enterprise authentication and RBAC platform — JWT auth service with Azure AD/LDAP SSO, role-based access control, OTP verification, and a React admin frontend.
+Enterprise authentication and RBAC platform — JWT auth service with Keycloak/LDAP SSO, role-based access control, OTP verification, and a React admin frontend.
 
 ---
 
@@ -10,7 +10,7 @@ Enterprise authentication and RBAC platform — JWT auth service with Azure AD/L
 |---|---|
 | Backend | Java 21, Spring Boot 3, PostgreSQL, Redis, Flyway |
 | Auth | JWT (HS512), Spring Security 6, Spring LDAP |
-| SSO | Keycloak (dev) / Azure AD (prod), OIDC + PKCE |
+| SSO | Keycloak (dev) / Keycloak (prod), OIDC + PKCE |
 | Async | AWS SQS + SES (LocalStack in dev) |
 | Frontend | React 19, Vite, TailwindCSS, Axios |
 | Infrastructure | Docker Compose, Kubernetes (k8s/) |
@@ -213,7 +213,7 @@ cd auth && mvn test
 - [ ] Set `AD_LDAP_USER_DN` / `AD_LDAP_PASSWORD` to the `svc-ldap` service account from secrets manager
 - [ ] Set `CORS_ALLOWED_ORIGINS` to exact production frontend URL
 - [ ] Set `AWS_ENDPOINT` to blank (uses real AWS SQS / SES)
-- [ ] Replace Keycloak with Azure AD — update `AD_JWKS_URI`, `AD_ISSUER`, `AD_AUDIENCE`
+- [ ] Replace Keycloak with Keycloak — update `AD_JWKS_URI`, `AD_ISSUER`, `AD_AUDIENCE`
 - [ ] Use LDAPS (`ldaps://`) for LDAP
 - [ ] Enable HTTPS at load balancer / ingress
 - [ ] Disable SQL debug logging (`application-prod.properties`)
