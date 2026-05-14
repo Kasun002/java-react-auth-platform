@@ -1,5 +1,8 @@
 package com.shop.auth.dto;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -17,4 +20,7 @@ public class CreateRoleRequestDto {
     @Size(max = 500, message = "description must be at most 500 characters")
     @Schema(description = "Human-readable description of the role", example = "Can manage team members")
     private String description;
+
+    @Schema(description = "IDs of permissions to assign to this role. Leave empty for no permissions.")
+    private List<Long> permissionIds = new ArrayList<>();
 }

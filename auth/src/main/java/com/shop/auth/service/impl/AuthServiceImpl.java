@@ -48,7 +48,6 @@ import com.shop.auth.exception.PasswordExpiredException;
 import com.shop.auth.exception.PasswordResetTokenException;
 import com.shop.auth.exception.ResourceNotFoundException;
 import com.shop.auth.exception.UserNotActiveException;
-import com.shop.auth.repository.RoleRepository;
 import com.shop.auth.repository.UserGroupRepository;
 import com.shop.auth.repository.UserLogRepository;
 import com.shop.auth.repository.UserRepository;
@@ -101,7 +100,6 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final UserGroupRepository userGroupRepository;
-    private final RoleRepository roleRepository;
     private final UserLogRepository userLogRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -585,14 +583,9 @@ public class AuthServiceImpl implements AuthService {
         user.setStatus(UserStatus.ACTIVE);
         user.setPasswordChangedAt(LocalDateTime.now());
 
-        // Assign requested groups
+        // Assign requested groups — roles and permissions are inherited transitively
         for (Long groupId : request.getGroupIds()) {
             userGroupRepository.findById(groupId).ifPresent(g -> user.getGroups().add(g));
-        }
-
-        // Assign requested direct roles
-        for (Long roleId : request.getRoleIds()) {
-            roleRepository.findById(roleId).ifPresent(r -> user.getDirectRoles().add(r));
         }
 
         userRepository.save(user);

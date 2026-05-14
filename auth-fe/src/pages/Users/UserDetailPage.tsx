@@ -504,6 +504,8 @@ export default function UserDetailPage() {
 
   // ── Derived data ─────────────────────────────────────────────────────────
 
+  const isAdUser = user.authProvider === "AZURE_AD";
+
   // Flatten all roles from all groups and deduplicate
   const allRoles = groups.flatMap((g) =>
     g.roles.map((r) => ({ ...r, sourceGroup: g.name }))
@@ -619,12 +621,25 @@ export default function UserDetailPage() {
               )
             )}
 
-            <button
-              onClick={() => setAssignOpen(true)}
-              className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
-            >
-              + Assign group
-            </button>
+            {/* Assign group — hidden for AD users (groups managed in AD/Keycloak) */}
+            {isAdUser ? (
+              <span
+                title="Group memberships are managed in Active Directory — changes must be made in AD/Keycloak"
+                className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-400 dark:border-gray-700 dark:text-gray-600"
+              >
+                + Assign group
+                <span className="rounded bg-warning-100 px-1 py-0.5 text-xs text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
+                  AD
+                </span>
+              </span>
+            ) : (
+              <button
+                onClick={() => setAssignOpen(true)}
+                className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
+              >
+                + Assign group
+              </button>
+            )}
 
             {/* Delete — hidden for the currently logged-in admin (BE guards this too) */}
             {!isSelf && user.status !== "DELETED" && (
@@ -733,12 +748,14 @@ export default function UserDetailPage() {
                     {groups.length} group{groups.length !== 1 ? "s" : ""}
                   </p>
                 </div>
-                <button
-                  onClick={() => setAssignOpen(true)}
-                  className="text-xs text-brand-500 hover:text-brand-600 font-medium"
-                >
-                  + Add
-                </button>
+                {!isAdUser && (
+                  <button
+                    onClick={() => setAssignOpen(true)}
+                    className="text-xs text-brand-500 hover:text-brand-600 font-medium"
+                  >
+                    + Add
+                  </button>
+                )}
               </div>
 
               {groupsLoading ? (
@@ -773,13 +790,15 @@ export default function UserDetailPage() {
                       <span className="text-xs text-gray-400 shrink-0">
                         {g.roles.length} role{g.roles.length !== 1 ? "s" : ""}
                       </span>
-                      <button
-                        onClick={() => handleRemoveGroup(g.id)}
-                        className="ml-1 text-xs text-gray-400 hover:text-error-500 dark:hover:text-error-400 transition-colors"
-                        title="Remove from group"
-                      >
-                        ✕
-                      </button>
+                      {!isAdUser && (
+                        <button
+                          onClick={() => handleRemoveGroup(g.id)}
+                          className="ml-1 text-xs text-gray-400 hover:text-error-500 dark:hover:text-error-400 transition-colors"
+                          title="Remove from group"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -825,12 +844,21 @@ export default function UserDetailPage() {
               <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
                 Group memberships
               </h3>
-              <button
-                onClick={() => setAssignOpen(true)}
-                className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 transition-colors"
-              >
-                + Assign
-              </button>
+              {isAdUser ? (
+                <span
+                  title="Managed in Active Directory"
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 dark:border-gray-700 dark:text-gray-600"
+                >
+                  AD managed
+                </span>
+              ) : (
+                <button
+                  onClick={() => setAssignOpen(true)}
+                  className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 transition-colors"
+                >
+                  + Assign
+                </button>
+              )}
             </div>
             {groupsLoading ? (
               <div className="flex items-center justify-center py-12 text-sm text-gray-400">
@@ -875,12 +903,14 @@ export default function UserDetailPage() {
                         {g.roles.length}
                       </TableCell>
                       <TableCell className="px-6 py-3">
-                        <button
-                          onClick={() => handleRemoveGroup(g.id)}
-                          className="rounded-lg border border-error-200 px-3 py-1 text-xs font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors"
-                        >
-                          Remove
-                        </button>
+                        {!isAdUser && (
+                          <button
+                            onClick={() => handleRemoveGroup(g.id)}
+                            className="rounded-lg border border-error-200 px-3 py-1 text-xs font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1013,8 +1043,8 @@ export default function UserDetailPage() {
         )}
       </div>
 
-      {/* Assign group modal */}
-      {assignOpen && (
+      {/* Assign group modal — only for LOCAL users */}
+      {assignOpen && !isAdUser && (
         <AssignGroupModal
           userId={userId}
           currentGroupIds={currentGroupIds}

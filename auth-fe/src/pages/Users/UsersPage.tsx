@@ -13,12 +13,10 @@ import { UserCircleIcon, GroupIcon } from "../../icons";
 import {
   getUsers,
   listGroups,
-  listRoles,
   createUser,
 } from "../../services/adminService";
 import type {
   AdminCreateUserRequest,
-  RoleDto,
   UserGroupDto,
 } from "../../types/admin";
 import type { UserDto } from "../../types/auth";
@@ -105,19 +103,14 @@ function CreateUserModal({ onClose, onCreated }: Readonly<CreateUserModalProps>)
     temporaryPassword: "",
     phone: "",
     groupIds: [],
-    roleIds: [],
   });
   const [groups, setGroups] = useState<UserGroupDto[]>([]);
-  const [roles, setRoles] = useState<RoleDto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     listGroups()
       .then((r) => setGroups(r.data.data ?? []))
-      .catch(() => {});
-    listRoles()
-      .then((r) => setRoles(r.data.data ?? []))
       .catch(() => {});
   }, []);
 
@@ -276,51 +269,6 @@ function CreateUserModal({ onClose, onCreated }: Readonly<CreateUserModalProps>)
               </div>
             </div>
 
-            {/* Roles */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
-                Direct roles{" "}
-                <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <div className="max-h-36 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
-                {roles.length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-gray-400">
-                    No roles available
-                  </p>
-                ) : (
-                  roles.map((r) => (
-                    <label
-                      key={r.id}
-                      className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.roleIds.includes(r.id)}
-                        onChange={() =>
-                          setForm((f) => ({
-                            ...f,
-                            roleIds: toggle(f.roleIds, r.id),
-                          }))
-                        }
-                        className="accent-brand-500"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-800 dark:text-white/90 font-mono">
-                          {r.name}
-                        </p>
-                        <p className="truncate text-xs text-gray-400">
-                          {r.description}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-xs text-gray-400">
-                        {r.permissions.length} perm
-                        {r.permissions.length !== 1 ? "s" : ""}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Footer */}

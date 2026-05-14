@@ -37,7 +37,4 @@ public class AdminCreateUserRequestDto {
 
     @Schema(description = "IDs of groups to add the user to immediately. Leave empty to assign no groups.")
     private List<Long> groupIds = new ArrayList<>();
-
-    @Schema(description = "IDs of roles to assign directly to the user (in addition to group-inherited roles). Leave empty for no direct roles.")
-    private List<Long> roleIds = new ArrayList<>();
 }
