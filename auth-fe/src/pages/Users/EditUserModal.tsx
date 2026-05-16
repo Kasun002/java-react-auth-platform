@@ -56,9 +56,9 @@ export default function EditUserModal({ user, onClose, onSaved }: Readonly<Props
             </div>
           )}
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+            <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
               Full name <span className="text-error-500">*</span>
-            </label>
+            </div>
             <input
               required
               value={form.name}
@@ -67,9 +67,9 @@ export default function EditUserModal({ user, onClose, onSaved }: Readonly<Props
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+            <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
               Email <span className="text-error-500">*</span>
-            </label>
+            </div>
             <input
               required
               type="email"
@@ -79,9 +79,9 @@ export default function EditUserModal({ user, onClose, onSaved }: Readonly<Props
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+            <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
               Phone
-            </label>
+            </div>
             <input
               value={form.phone}
               onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}

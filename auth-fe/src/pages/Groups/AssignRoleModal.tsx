@@ -76,7 +76,7 @@ export default function AssignRoleModal({
               </p>
             ) : (
               availableRoles.map((r) => (
-                <label
+                <div
                   key={r.id}
                   className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${
                     selected === r.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
@@ -102,7 +102,7 @@ export default function AssignRoleModal({
                     {r.permissions.length} perm
                     {r.permissions.length === 1 ? "" : "s"}
                   </span>
-                </label>
+                </div>
               ))
             )}
           </div>

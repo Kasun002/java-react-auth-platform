@@ -72,9 +72,9 @@ export default function CreateUserModal({ onClose, onCreated }: Readonly<Props>)
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
                   Full name <span className="text-error-500">*</span>
-                </label>
+                </div>
                 <input
                   required
                   value={form.name}
@@ -84,9 +84,9 @@ export default function CreateUserModal({ onClose, onCreated }: Readonly<Props>)
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
                   Email <span className="text-error-500">*</span>
-                </label>
+                </div>
                 <input
                   required
                   type="email"
@@ -97,9 +97,9 @@ export default function CreateUserModal({ onClose, onCreated }: Readonly<Props>)
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
                   Temporary password <span className="text-error-500">*</span>
-                </label>
+                </div>
                 <input
                   required
                   type="password"
@@ -112,9 +112,9 @@ export default function CreateUserModal({ onClose, onCreated }: Readonly<Props>)
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+                <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
                   Phone
-                </label>
+                </div>
                 <input
                   value={form.phone}
                   onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
@@ -125,16 +125,16 @@ export default function CreateUserModal({ onClose, onCreated }: Readonly<Props>)
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
+              <div className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-400">
                 Groups{" "}
                 <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
+              </div>
               <div className="max-h-36 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 {groups.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-gray-400">No groups available</p>
                 ) : (
                   groups.map((g) => (
-                    <label
+                    <div
                       key={g.id}
                       className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                     >
@@ -153,7 +153,7 @@ export default function CreateUserModal({ onClose, onCreated }: Readonly<Props>)
                         <p className="truncate text-xs text-gray-400">{g.description}</p>
                       </div>
                       <Badge color="light" size="sm">{g.type}</Badge>
-                    </label>
+                    </div>
                   ))
                 )}
               </div>

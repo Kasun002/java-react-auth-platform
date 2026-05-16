@@ -9,7 +9,11 @@ interface Props {
   onSaved: (r: RoleDto) => void;
 }
 
-export default function EditRoleModal({ role, onClose, onSaved }: Readonly<Props>) {
+export default function EditRoleModal({
+  role,
+  onClose,
+  onSaved,
+}: Readonly<Props>) {
   const [name, setName] = useState(role.name);
   const [description, setDescription] = useState(role.description ?? "");
   const [saving, setSaving] = useState(false);
@@ -20,10 +24,16 @@ export default function EditRoleModal({ role, onClose, onSaved }: Readonly<Props
     setSaving(true);
     setError(null);
     try {
-      const req: UpdateRoleRequest = { name, description };
+      const req: UpdateRoleRequest = {
+        name, description,
+        permissionIds: []
+      };
       const res = await updateRole(role.id, req);
       const saved = res.data.data;
-      if (saved) { onSaved(saved); onClose(); }
+      if (saved) {
+        onSaved(saved);
+        onClose();
+      }
     } catch (err) {
       setError(apiError(err));
     } finally {
@@ -52,9 +62,9 @@ export default function EditRoleModal({ role, onClose, onSaved }: Readonly<Props
             </div>
           )}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+            <div className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
               Name <span className="text-error-500">*</span>
-            </label>
+            </div>
             <input
               required
               value={name}
@@ -63,9 +73,9 @@ export default function EditRoleModal({ role, onClose, onSaved }: Readonly<Props
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+            <div className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
               Description
-            </label>
+            </div>
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}

@@ -18,7 +18,11 @@ interface Props {
   onSaved: (r: RoleDto) => void;
 }
 
-export default function RoleModal({ initial, onClose, onSaved }: Readonly<Props>) {
+export default function RoleModal({
+  initial,
+  onClose,
+  onSaved,
+}: Readonly<Props>) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [selectedPermIds, setSelectedPermIds] = useState<number[]>(
@@ -64,15 +68,29 @@ export default function RoleModal({ initial, onClose, onSaved }: Readonly<Props>
     setError(null);
     try {
       if (initial) {
-        const req: UpdateRoleRequest = { name, description, permissionIds: selectedPermIds };
+        const req: UpdateRoleRequest = {
+          name,
+          description,
+          permissionIds: selectedPermIds,
+        };
         const res = await updateRole(initial.id, req);
         const saved = res.data.data;
-        if (saved) { onSaved(saved); onClose(); }
+        if (saved) {
+          onSaved(saved);
+          onClose();
+        }
       } else {
-        const req: CreateRoleRequest = { name, description, permissionIds: selectedPermIds };
+        const req: CreateRoleRequest = {
+          name,
+          description,
+          permissionIds: selectedPermIds,
+        };
         const res = await createRole(req);
         const saved = res.data.data;
-        if (saved) { onSaved(saved); onClose(); }
+        if (saved) {
+          onSaved(saved);
+          onClose();
+        }
       }
     } catch (err) {
       setError(apiError(err));
@@ -149,7 +167,9 @@ export default function RoleModal({ initial, onClose, onSaved }: Readonly<Props>
               />
               <div className="max-h-52 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 space-y-0">
                 {Object.keys(grouped).length === 0 ? (
-                  <p className="px-4 py-3 text-xs text-gray-400">No permissions found</p>
+                  <p className="px-4 py-3 text-xs text-gray-400">
+                    No permissions found
+                  </p>
                 ) : (
                   Object.entries(grouped)
                     .sort(([a], [b]) => a.localeCompare(b))
@@ -159,7 +179,7 @@ export default function RoleModal({ initial, onClose, onSaved }: Readonly<Props>
                           {category}
                         </div>
                         {perms.map((p) => (
-                          <label
+                          <div
                             key={p.id}
                             className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                           >
@@ -179,7 +199,7 @@ export default function RoleModal({ initial, onClose, onSaved }: Readonly<Props>
                                 </p>
                               )}
                             </div>
-                          </label>
+                          </div>
                         ))}
                       </div>
                     ))
@@ -201,7 +221,7 @@ export default function RoleModal({ initial, onClose, onSaved }: Readonly<Props>
               disabled={saving}
               className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {saving ? "Saving…" : initial ? "Save changes" : "Create"}
+              {saving ? "Saving…" : <>{initial ? "Save changes" : "Create"}</>}
             </button>
           </div>
         </form>

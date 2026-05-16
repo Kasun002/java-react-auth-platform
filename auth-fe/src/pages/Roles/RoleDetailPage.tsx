@@ -44,24 +44,32 @@ export default function RoleDetailPage() {
         const r = roleRes.data.data;
         const perms = permsRes.data.data ?? [];
         const groups = groupsRes.data.data ?? [];
-        if (!r) { setError("Role not found."); return; }
+        if (!r) {
+          setError("Role not found.");
+          return;
+        }
         setRole(r);
         setAllPermissions(perms);
         const currentIds = new Set(r.permissions.map((p) => p.id));
         setGrantedIds(new Set(currentIds));
         setOriginalIds(new Set(currentIds));
-        setUsedByGroups(groups.filter((g) => g.roles.some((gr) => gr.id === roleId)));
+        setUsedByGroups(
+          groups.filter((g) => g.roles.some((gr) => gr.id === roleId))
+        );
       })
       .catch(() => setError("Failed to load role."))
       .finally(() => setLoading(false));
   }, [roleId]);
 
-  useEffect(() => { fetchRole(); }, [fetchRole]);
+  useEffect(() => {
+    fetchRole();
+  }, [fetchRole]);
 
   function togglePermission(permId: number) {
     setGrantedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(permId)) next.delete(permId); else next.add(permId);
+      if (next.has(permId)) next.delete(permId);
+      else next.add(permId);
       return next;
     });
     setSaveSuccess(false);
@@ -108,7 +116,8 @@ export default function RoleDetailPage() {
 
   async function handleDelete() {
     if (!role) return;
-    if (!window.confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
+    if (!globalThis.confirm(`Delete role "${role.name}"? This cannot be undone.`))
+      return;
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -175,7 +184,10 @@ export default function RoleDetailPage() {
       {deleteError && (
         <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
           {deleteError}
-          <button onClick={() => setDeleteError(null)} className="ml-3 text-xs underline">
+          <button
+            onClick={() => setDeleteError(null)}
+            className="ml-3 text-xs underline"
+          >
             Dismiss
           </button>
         </div>
@@ -197,7 +209,10 @@ export default function RoleDetailPage() {
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
               <span>{grantedIds.size} permissions</span>
               <span>&middot;</span>
-              <span>used by {usedByGroups.length} group{usedByGroups.length !== 1 ? "s" : ""}</span>
+              <span>
+                used by {usedByGroups.length} group
+                {usedByGroups.length === 1 ? "" : "s"}
+              </span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -262,7 +277,9 @@ export default function RoleDetailPage() {
 
           <div className="p-5 space-y-3">
             {Object.entries(byCategory).map(([category, perms]) => {
-              const grantedCount = perms.filter((p) => grantedIds.has(p.id)).length;
+              const grantedCount = perms.filter((p) =>
+                grantedIds.has(p.id)
+              ).length;
               const allGranted = grantedCount === perms.length;
               return (
                 <div
@@ -271,7 +288,9 @@ export default function RoleDetailPage() {
                 >
                   <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-white/[0.02] px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <Badge color="light" size="sm">{category}</Badge>
+                      <Badge color="light" size="sm">
+                        {category}
+                      </Badge>
                       <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
                         {grantedCount} / {perms.length}
                       </span>
@@ -287,7 +306,7 @@ export default function RoleDetailPage() {
                     {perms.map((p) => {
                       const granted = grantedIds.has(p.id);
                       return (
-                        <label
+                        <div
                           key={p.id}
                           className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
                         >
@@ -310,7 +329,7 @@ export default function RoleDetailPage() {
                           <span className="text-xs text-gray-600 dark:text-gray-400 truncate">
                             {p.description}
                           </span>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>
@@ -327,7 +346,7 @@ export default function RoleDetailPage() {
               Used by groups
             </h3>
             <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {usedByGroups.length} group{usedByGroups.length !== 1 ? "s" : ""}
+              {usedByGroups.length} group{usedByGroups.length === 1 ? "" : "s"}
             </p>
           </div>
           {usedByGroups.length === 0 ? (

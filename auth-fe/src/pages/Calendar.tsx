@@ -163,9 +163,9 @@ const Calendar: React.FC = () => {
             <div className="mt-8">
               <div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
+                  <div className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
                     Event Title
-                  </label>
+                  </div>
                   <input
                     id="event-title"
                     type="text"
@@ -176,16 +176,16 @@ const Calendar: React.FC = () => {
                 </div>
               </div>
               <div className="mt-6">
-                <label className="block mb-4 text-sm font-medium text-gray-700 dark:text-gray-400">
+                <div className="block mb-4 text-sm font-medium text-gray-700 dark:text-gray-400">
                   Event Color
-                </label>
+                </div>
                 <div className="flex flex-wrap items-center gap-4 sm:gap-5">
                   {Object.entries(calendarsEvents).map(([key, value]) => (
                     <div key={key} className="n-chk">
                       <div
                         className={`form-check form-check-${value} form-check-inline`}
                       >
-                        <label
+                        <div
                           className="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
                           htmlFor={`modal${key}`}
                         >
@@ -208,7 +208,7 @@ const Calendar: React.FC = () => {
                             </span>
                           </span>
                           {key}
-                        </label>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -216,9 +216,9 @@ const Calendar: React.FC = () => {
               </div>
 
               <div className="mt-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
+                <div className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
                   Enter Start Date
-                </label>
+                </div>
                 <div className="relative">
                   <input
                     id="event-start-date"
@@ -231,9 +231,9 @@ const Calendar: React.FC = () => {
               </div>
 
               <div className="mt-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
+                <div className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
                   Enter End Date
-                </label>
+                </div>
                 <div className="relative">
                   <input
                     id="event-end-date"

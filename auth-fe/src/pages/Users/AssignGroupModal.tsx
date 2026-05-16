@@ -79,7 +79,7 @@ export default function AssignGroupModal({
               </p>
             ) : (
               availableGroups.map((g) => (
-                <label
+                <div
                   key={g.id}
                   className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${
                     selected === g.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
@@ -92,7 +92,9 @@ export default function AssignGroupModal({
                     onChange={() => setSelected(g.id)}
                     className="accent-brand-500"
                   />
-                  <Badge color="light" size="sm">{g.type}</Badge>
+                  <Badge color="light" size="sm">
+                    {g.type}
+                  </Badge>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-800 dark:text-white/90">
                       {g.name}
@@ -102,9 +104,9 @@ export default function AssignGroupModal({
                     </p>
                   </div>
                   <span className="shrink-0 text-xs text-gray-400">
-                    {g.roles.length} role{g.roles.length !== 1 ? "s" : ""}
+                    {g.roles.length} role{g.roles.length === 1 ? "" : "s"}
                   </span>
-                </label>
+                </div>
               ))
             )}
           </div>

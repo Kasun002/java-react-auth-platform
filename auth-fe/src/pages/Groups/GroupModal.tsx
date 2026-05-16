@@ -146,12 +146,12 @@ export default function GroupModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              <div className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
                 Roles{" "}
                 <span className="text-gray-400 font-normal">
                   (optional — users inherit permissions from these roles)
                 </span>
-              </label>
+              </div>
               <div className="max-h-44 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 {availableRoles.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-gray-400">
@@ -159,7 +159,7 @@ export default function GroupModal({
                   </p>
                 ) : (
                   availableRoles.map((r) => (
-                    <label
+                    <div
                       key={r.id}
                       className="flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                     >
@@ -183,7 +183,7 @@ export default function GroupModal({
                         {r.permissions.length} perm
                         {r.permissions.length === 1 ? "" : "s"}
                       </span>
-                    </label>
+                    </div>
                   ))
                 )}
               </div>
