@@ -42,20 +42,20 @@ const Pagination = ({
         </button>
         {visible.map((item, idx) =>
           item === "…" ? (
-            <span key={`el-${idx}`} className="px-1.5 text-xs text-gray-400">
+            <span key={`el-${idx+1}`} className="px-1.5 text-xs text-gray-400">
               …
             </span>
           ) : (
             <button
               key={item}
-              onClick={() => onPageChange(item as number)}
+              onClick={() => onPageChange(item)}
               className={`min-w-[28px] rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
                 page === item
                   ? "border-brand-500 bg-brand-500 text-white"
                   : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5"
               }`}
             >
-              {(item as number) + 1}
+              {(item) + 1}
             </button>
           )
         )}

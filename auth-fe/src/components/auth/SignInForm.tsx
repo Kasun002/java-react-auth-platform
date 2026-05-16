@@ -3,7 +3,11 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { EyeCloseIcon, EyeIcon } from "../../icons";
 import { localLogin } from "../../services/authService";
-import { generateCodeChallenge, generateCodeVerifier } from "../../utils/pkce";
+import {
+  generateCodeChallenge,
+  generateCodeVerifier,
+  generateState,
+} from "../../utils/pkce";
 import Label from "../form/Label";
 import Checkbox from "../form/input/Checkbox";
 import Input from "../form/input/InputField";
@@ -18,6 +22,7 @@ const AD_ERROR_MESSAGES: Record<string, string> = {
   ad_cancelled: "AD sign-in was cancelled.",
   ad_no_code: "AD sign-in did not return a code. Please try again.",
   ad_no_verifier: "Session expired. Please try again.",
+  ad_invalid_state: "Security check failed. Please try signing in again.",
 };
 
 export default function SignInForm() {
@@ -28,7 +33,8 @@ export default function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isChecked, setIsChecked] = useState(false);
+  // Default true — preserves existing "stay logged in" behaviour while wiring the checkbox
+  const [isChecked, setIsChecked] = useState(true);
 
   const [error, setError] = useState<string | null>(
     AD_ERROR_MESSAGES[searchParams.get("error") ?? ""] ?? null
@@ -52,7 +58,7 @@ export default function SignInForm() {
       const response = await localLogin(email, password);
       const { data } = response.data;
       if (!data) throw new Error(response.data.message);
-      login(data.accessToken, data.refreshToken, data.user);
+      login(data.accessToken, data.refreshToken, data.user, isChecked);
       navigate("/");
     } catch (err: unknown) {
       const message =
@@ -70,7 +76,13 @@ export default function SignInForm() {
     try {
       const verifier = generateCodeVerifier();
       const challenge = await generateCodeChallenge(verifier);
+      const state = generateState();
+
       sessionStorage.setItem("pkce_verifier", verifier);
+      // state is verified in AdCallback to prevent CSRF
+      sessionStorage.setItem("oauth_state", state);
+      // carry the "remember" preference through the redirect
+      sessionStorage.setItem("oauth_remember", isChecked ? "1" : "0");
 
       const redirectUri = `${globalThis.location.origin}/auth/callback`;
       const params = new URLSearchParams({
@@ -80,6 +92,7 @@ export default function SignInForm() {
         scope: "openid email profile",
         code_challenge: challenge,
         code_challenge_method: "S256",
+        state,
       });
 
       globalThis.location.href = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/auth?${params}`;

@@ -18,6 +18,7 @@ export default function AdCallback() {
     if (handled.current) return;
 
     const code = searchParams.get("code");
+    const returnedState = searchParams.get("state");
     const error = searchParams.get("error");
 
     if (error) {
@@ -30,7 +31,14 @@ export default function AdCallback() {
       return;
     }
 
-    handled.current = true;
+    // Verify state to prevent CSRF
+    const storedState = sessionStorage.getItem("oauth_state");
+    sessionStorage.removeItem("oauth_state");
+
+    if (!storedState || storedState !== returnedState) {
+      navigate("/signin?error=ad_invalid_state", { replace: true });
+      return;
+    }
 
     const verifier = sessionStorage.getItem("pkce_verifier");
     if (!verifier) {
@@ -38,6 +46,12 @@ export default function AdCallback() {
       return;
     }
     sessionStorage.removeItem("pkce_verifier");
+
+    // Read the "remember me" preference stored before the Keycloak redirect
+    const remember = sessionStorage.getItem("oauth_remember") === "1";
+    sessionStorage.removeItem("oauth_remember");
+
+    handled.current = true;
 
     const redirectUri = `${globalThis.location.origin}/auth/callback`;
     const tokenUrl = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`;
@@ -62,7 +76,7 @@ export default function AdCallback() {
         const { data } = response.data;
         if (!data) throw new Error("AD login rejected by server");
 
-        login(data.accessToken, data.refreshToken, data.user);
+        login(data.accessToken, data.refreshToken, data.user, remember);
         navigate("/dashboard", { replace: true });
       })
       .catch(() => {
