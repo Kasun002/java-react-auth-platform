@@ -10,136 +10,13 @@ import {
 } from "../../components/ui/table";
 import { BoltIcon } from "../../icons";
 import {
+  deletePermission,
   listPermissions,
   listRoles,
-  createPermission,
-  updatePermission,
-  deletePermission,
 } from "../../services/adminService";
-import type { PermissionDto, RoleDto, CreatePermissionRequest, UpdatePermissionRequest } from "../../types/admin";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function apiError(err: unknown): string {
-  const e = err as { response?: { data?: { message?: string } } };
-  return e?.response?.data?.message ?? "An unexpected error occurred";
-}
-
-// ── Permission Modal ──────────────────────────────────────────────────────────
-
-interface PermissionModalProps {
-  initial?: PermissionDto;
-  onClose: () => void;
-  onSaved: (p: PermissionDto) => void;
-}
-
-function PermissionModal({ initial, onClose, onSaved }: PermissionModalProps) {
-  const [code, setCode] = useState(initial?.code ?? "");
-  const [category, setCategory] = useState(initial?.category ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      if (initial) {
-        const req: UpdatePermissionRequest = { code, category, description };
-        const res = await updatePermission(initial.id, req);
-        onSaved(res.data.data!);
-      } else {
-        const req: CreatePermissionRequest = { code, category, description };
-        const res = await createPermission(req);
-        onSaved(res.data.data!);
-      }
-      onClose();
-    } catch (err) {
-      setError(apiError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
-            {initial ? "Edit permission" : "New permission"}
-          </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-          {error && (
-            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Code <span className="text-error-500">*</span>
-            </label>
-            <input
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="e.g. INVOICE_CREATE"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Category <span className="text-error-500">*</span>
-            </label>
-            <input
-              required
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="e.g. INVOICE"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Description
-            </label>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="What this permission grants…"
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {saving ? "Saving…" : initial ? "Save changes" : "Create"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Component ────────────────────────────────────────────────────────────
+import type { PermissionDto, RoleDto } from "../../types/admin";
+import PermissionModal from "./PermissionModal";
+import { apiError, TABLE_COLUMNS } from "./permissionUtils";
 
 export default function PermissionsPage() {
   const [permissions, setPermissions] = useState<PermissionDto[]>([]);
@@ -148,7 +25,6 @@ export default function PermissionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [catFilter, setCatFilter] = useState("ALL");
   const [query, setQuery] = useState("");
-
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PermissionDto | undefined>(undefined);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -164,7 +40,10 @@ export default function PermissionsPage() {
   }, []);
 
   const categories = useMemo(
-    () => [...new Set(permissions.map((p) => p.category))].sort(),
+    () =>
+      [...new Set(permissions.map((p) => p.category))].sort((a, b) =>
+        a.localeCompare(b)
+      ),
     [permissions]
   );
 
@@ -218,7 +97,12 @@ export default function PermissionsPage() {
   }
 
   async function handleDelete(p: PermissionDto) {
-    if (!window.confirm(`Delete permission "${p.code}"? This cannot be undone.`)) return;
+    if (
+      !globalThis.confirm(
+        `Delete permission "${p.code}"? This cannot be undone.`
+      )
+    )
+      return;
     setDeleteError(null);
     try {
       await deletePermission(p.id);
@@ -228,6 +112,95 @@ export default function PermissionsPage() {
     }
   }
 
+  function renderContent() {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-16 text-sm text-gray-400">
+          Loading permissions…
+        </div>
+      );
+    }
+    if (error) {
+      return (
+        <div className="flex items-center justify-center py-16 text-sm text-error-600 dark:text-error-400">
+          {error}
+        </div>
+      );
+    }
+    return (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-b border-gray-100 dark:border-gray-800">
+              {TABLE_COLUMNS.map(({ label, className }) => (
+                <TableCell
+                  key={label || "_actions"}
+                  isHeader
+                  className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 ${className}`}
+                >
+                  {label}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell className="px-6 py-12 text-center text-sm text-gray-400">
+                  <div className="flex flex-col items-center gap-2">
+                    <BoltIcon className="size-8 text-gray-300 dark:text-gray-600" />
+                    No permissions match the current filters
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              filtered.map((p) => (
+                <TableRow
+                  key={p.id}
+                  className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
+                >
+                  <TableCell className="px-6 py-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 dark:border-brand-500/30 dark:bg-brand-500/10 px-2.5 py-1 text-xs font-mono text-brand-700 dark:text-brand-300">
+                      <BoltIcon className="size-3 shrink-0" />
+                      {p.code}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-6 py-3 hidden md:table-cell">
+                    <Badge color="light" size="sm">
+                      {p.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-6 py-3 text-sm text-gray-600 dark:text-gray-400">
+                    {p.description}
+                  </TableCell>
+                  <TableCell className="px-6 py-3 text-right text-sm tabular-nums text-gray-600 dark:text-gray-400 hidden lg:table-cell">
+                    {roleCountMap[p.id] ?? 0}
+                  </TableCell>
+                  <TableCell className="px-6 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => openEdit(p)}
+                        className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/5 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(p)}
+                        className="rounded px-2 py-1 text-xs font-medium text-error-500 hover:text-error-700 hover:bg-error-50 dark:hover:bg-error-500/10 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+
   return (
     <>
       <PageMeta
@@ -235,19 +208,24 @@ export default function PermissionsPage() {
         description="Permission catalog — all atomic operation codes across resource categories"
       />
 
-      {/* ── Page header ── */}
+      {/* Page header */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-800 dark:text-white/90">
             Permissions
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {permissions.length} permission codes across {categories.length} categories
+            {permissions.length} permission codes across {categories.length}{" "}
+            categories
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge color="light" size="sm">OWASP ASVS L2</Badge>
-          <Badge color="light" size="sm">PCI-DSS Req 7.2</Badge>
+          <Badge color="light" size="sm">
+            OWASP ASVS L2
+          </Badge>
+          <Badge color="light" size="sm">
+            PCI-DSS Req 7.2
+          </Badge>
           <button
             onClick={openCreate}
             className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
@@ -258,15 +236,20 @@ export default function PermissionsPage() {
         </div>
       </div>
 
-      {/* ── Delete error banner ── */}
+      {/* Delete error banner */}
       {deleteError && (
         <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
           {deleteError}
-          <button onClick={() => setDeleteError(null)} className="ml-3 text-xs underline">Dismiss</button>
+          <button
+            onClick={() => setDeleteError(null)}
+            className="ml-3 text-xs underline"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* ── Filters ── */}
+      {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative">
           <svg
@@ -300,7 +283,7 @@ export default function PermissionsPage() {
                   : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
               }`}
             >
-              {c === "ALL" ? "ALL" : c.split(" ")[0]}
+              {c === "ALL" ? c : c.split(" ")[0]}
             </button>
           ))}
         </div>
@@ -310,92 +293,9 @@ export default function PermissionsPage() {
         </span>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-gray-400">
-            Loading permissions…
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center py-16 text-sm text-error-600 dark:text-error-400">
-            {error}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-gray-100 dark:border-gray-800">
-                  {[
-                    { label: "Code", className: "w-64" },
-                    { label: "Category", className: "w-40 hidden md:table-cell" },
-                    { label: "Description", className: "" },
-                    { label: "Roles", className: "w-20 text-right hidden lg:table-cell" },
-                    { label: "", className: "w-24" },
-                  ].map(({ label, className }) => (
-                    <TableCell
-                      key={label || "_actions"}
-                      isHeader
-                      className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 ${className}`}
-                    >
-                      {label}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell className="px-6 py-12 text-center text-sm text-gray-400">
-                      <div className="flex flex-col items-center gap-2">
-                        <BoltIcon className="size-8 text-gray-300 dark:text-gray-600" />
-                        No permissions match the current filters
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((p) => (
-                    <TableRow
-                      key={p.id}
-                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
-                    >
-                      <TableCell className="px-6 py-3">
-                        <span className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 dark:border-brand-500/30 dark:bg-brand-500/10 px-2.5 py-1 text-xs font-mono text-brand-700 dark:text-brand-300">
-                          <BoltIcon className="size-3 shrink-0" />
-                          {p.code}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-6 py-3 hidden md:table-cell">
-                        <Badge color="light" size="sm">{p.category}</Badge>
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        {p.description}
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-right text-sm tabular-nums text-gray-600 dark:text-gray-400 hidden lg:table-cell">
-                        {roleCountMap[p.id] ?? 0}
-                      </TableCell>
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => openEdit(p)}
-                            className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-white/5 transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(p)}
-                            className="rounded px-2 py-1 text-xs font-medium text-error-500 hover:text-error-700 hover:bg-error-50 dark:hover:bg-error-500/10 transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+        {renderContent()}
       </div>
 
       {modalOpen && (
