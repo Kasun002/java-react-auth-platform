@@ -1,7 +1,4 @@
-export function apiError(err: unknown): string {
-  const e = err as { response?: { data?: { message?: string } } };
-  return e?.response?.data?.message ?? "An unexpected error occurred";
-}
+export { apiError } from "../../utils/api";
 
 export const TABLE_COLUMNS = [
   { label: "Code", className: "w-64" },

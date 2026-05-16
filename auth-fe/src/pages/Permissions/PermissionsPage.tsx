@@ -17,6 +17,7 @@ import {
 import type { PermissionDto, RoleDto } from "../../types/admin";
 import PermissionModal from "./PermissionModal";
 import { apiError, TABLE_COLUMNS } from "./permissionUtils";
+import SearchInput from "../../components/ui/SearchInput";
 
 export default function PermissionsPage() {
   const [permissions, setPermissions] = useState<PermissionDto[]>([]);
@@ -251,26 +252,7 @@ export default function PermissionsPage() {
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search permissions…"
-            className="h-10 w-72 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90 dark:placeholder-gray-500"
-          />
-        </div>
+        <SearchInput value={query} onChange={setQuery} placeholder="Search permissions…" />
 
         <div className="flex flex-wrap items-center gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
           {["ALL", ...categories].map((c) => (

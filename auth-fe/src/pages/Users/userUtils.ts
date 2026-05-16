@@ -1,5 +1,11 @@
 import type { PermissionDto } from "../../types/admin";
 
+export {
+  getInitials,
+  formatDate,
+  formatDateTime,
+} from "../../utils/formatters";
+
 export const PAGE_SIZE = 10;
 
 export type UserStatusColor = "success" | "error" | "warning" | "light";
@@ -27,33 +33,4 @@ export interface RoleWithSource {
   description?: string;
   permissions: PermissionDto[];
   sourceGroup: string;
-}
-
-export function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-export function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-export function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

@@ -9,17 +9,13 @@ import type {
   UpdatePermissionRequest,
 } from "../../types/admin";
 import { apiError } from "./permissionUtils";
+import { inputCls, inputMonoCls } from "../../utils/styles";
 
 interface Props {
   initial?: PermissionDto;
   onClose: () => void;
   onSaved: (p: PermissionDto) => void;
 }
-
-const inputCls =
-  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90";
-
-const inputMonoCls = `${inputCls} font-mono`;
 
 export default function PermissionModal({ initial, onClose, onSaved }: Readonly<Props>) {
   const [code, setCode] = useState(initial?.code ?? "");

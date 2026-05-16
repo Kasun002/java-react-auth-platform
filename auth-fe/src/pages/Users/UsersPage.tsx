@@ -15,6 +15,7 @@ import type { UserGroupDto } from "../../types/admin";
 import type { UserDto } from "../../types/auth";
 import Pagination from "../../utils/tblPagination";
 import CreateUserModal from "./CreateUserModal";
+import SearchInput from "../../components/ui/SearchInput";
 import {
   AUTH_PROVIDER_LABEL,
   PAGE_SIZE,
@@ -152,22 +153,7 @@ export default function UsersPage() {
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, email or ID…"
-            className="h-10 w-72 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90 dark:placeholder-gray-500"
-          />
-        </div>
+        <SearchInput value={query} onChange={setQuery} placeholder="Search by name, email or ID…" />
 
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Status:</span>

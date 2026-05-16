@@ -56,7 +56,7 @@ function GroupOverviewTab({
                 </div>
                 <span className="text-xs text-gray-400 shrink-0">
                   {r.permissions.length} perm
-                  {r.permissions.length !== 1 ? "s" : ""}
+                  {r.permissions.length === 1 ? "" : "s"}
                 </span>
                 <button
                   onClick={() => onRemoveRole(r.id)}
