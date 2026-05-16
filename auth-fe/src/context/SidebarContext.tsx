@@ -35,7 +35,7 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < 768;
+      const mobile = globalThis.innerWidth < 768;
       setIsMobile(mobile);
       if (!mobile) {
         setIsMobileOpen(false);
@@ -43,10 +43,10 @@ export const SidebarProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     handleResize();
-    window.addEventListener("resize", handleResize);
+    globalThis.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      globalThis.removeEventListener("resize", handleResize);
     };
   }, []);
 
