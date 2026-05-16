@@ -64,6 +64,25 @@ const SECURITY_CONFIG = [
   },
 ];
 
+const COMPLIANCE_STANDARDS = [
+  {
+    standard: "PCI-DSS v4",
+    reqs: ["Req 7.2 — Least privilege", "Req 8.6 — MFA", "Req 10.2 — Audit log"],
+  },
+  {
+    standard: "NIST SP 800-63B",
+    reqs: ["Password length ≥ 12", "Breach corpus check", "No periodic forced rotation"],
+  },
+  {
+    standard: "ISO 27001",
+    reqs: ["A.9.4.2 — Separation of duties", "A.12.4 — Logging", "A.9.2 — Access provisioning"],
+  },
+  {
+    standard: "OWASP ASVS L2",
+    reqs: ["V2 — Authentication", "V4 — Access control", "V7 — Error handling & logging"],
+  },
+];
+
 const MIGRATIONS = [
   { id: 1, version: "V10", name: "create_rbac_tables", applied: "2026-04-28 11:02:14" },
   { id: 2, version: "V11", name: "seed_rbac_banking_data", applied: "2026-04-28 11:02:15" },
@@ -189,24 +208,7 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="p-5 space-y-3">
-            {[
-              {
-                standard: "PCI-DSS v4",
-                reqs: ["Req 7.2 — Least privilege", "Req 8.6 — MFA", "Req 10.2 — Audit log"],
-              },
-              {
-                standard: "NIST SP 800-63B",
-                reqs: ["Password length ≥ 12", "Breach corpus check", "No periodic forced rotation"],
-              },
-              {
-                standard: "ISO 27001",
-                reqs: ["A.9.4.2 — Separation of duties", "A.12.4 — Logging", "A.9.2 — Access provisioning"],
-              },
-              {
-                standard: "OWASP ASVS L2",
-                reqs: ["V2 — Authentication", "V4 — Access control", "V7 — Error handling & logging"],
-              },
-            ].map(({ standard, reqs }) => (
+            {COMPLIANCE_STANDARDS.map(({ standard, reqs }) => (
               <div
                 key={standard}
                 className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
