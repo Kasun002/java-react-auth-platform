@@ -25,7 +25,8 @@ import UserDetailPage from "./pages/Users/UserDetailPage";
 import UsersPage from "./pages/Users/UsersPage";
 
 function RootRedirect() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, rehydrating } = useAuth();
+  if (rehydrating) return null; // wait for silent refresh before redirecting
   return <Navigate to={isAuthenticated ? "/dashboard" : "/signin"} replace />;
 }
 

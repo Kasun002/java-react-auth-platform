@@ -1,3 +1,10 @@
+/** Generate a cryptographically random OAuth2 `state` value to prevent CSRF. */
+export function generateState(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return base64UrlEncode(array);
+}
+
 /** Generate a cryptographically random PKCE code verifier (43-128 chars, base64url). */
 export function generateCodeVerifier(): string {
   const array = new Uint8Array(32);
@@ -14,7 +21,7 @@ export async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
+  return btoa(String.fromCodePoint(...bytes))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");

@@ -1,69 +1,185 @@
 import {
   createContext,
-  useContext,
-  useState,
   useCallback,
+  useContext,
+  useEffect,
+  useState,
   type ReactNode,
 } from "react";
+import {
+  setAuthTokens,
+  setOnSessionExpired,
+  setOnTokenRefreshed,
+} from "../lib/axios";
+import { refreshAccessToken, logoutApi } from "../services/authService";
 import type { UserDto } from "../types/auth";
-import { logoutApi } from "../services/authService";
 
-interface AuthState {
-  user: UserDto | null;
+// ── Public API ────────────────────────────────────────────────────────────────
+
+interface AuthContextValue {
+  /** In-memory access token — never written to localStorage. */
   accessToken: string | null;
-  refreshToken: string | null;
-}
-
-interface AuthContextValue extends AuthState {
+  user: UserDto | null;
   isAuthenticated: boolean;
-  login: (accessToken: string, refreshToken: string, user: UserDto) => void;
+  /** True while a silent token refresh is in flight on first load. */
+  rehydrating: boolean;
+  login: (
+    accessToken: string,
+    refreshToken: string,
+    user: UserDto,
+    remember: boolean
+  ) => void;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function loadFromStorage(): AuthState {
+// ── Storage helpers ───────────────────────────────────────────────────────────
+
+function getStoredSession(): {
+  refreshToken: string | null;
+  user: UserDto | null;
+  remember: boolean;
+} {
   try {
-    return {
-      accessToken: localStorage.getItem("accessToken"),
-      refreshToken: localStorage.getItem("refreshToken"),
-      user: JSON.parse(localStorage.getItem("user") ?? "null"),
-    };
+    // localStorage → "keep me logged in" (persists across browser sessions)
+    const lsToken = localStorage.getItem("refreshToken");
+    if (lsToken) {
+      return {
+        refreshToken: lsToken,
+        user: JSON.parse(localStorage.getItem("user") ?? "null") as UserDto | null,
+        remember: true,
+      };
+    }
+    // sessionStorage → session-only (cleared when browser tab closes)
+    const ssToken = sessionStorage.getItem("refreshToken");
+    if (ssToken) {
+      return {
+        refreshToken: ssToken,
+        user: JSON.parse(sessionStorage.getItem("user") ?? "null") as UserDto | null,
+        remember: false,
+      };
+    }
   } catch {
-    return { accessToken: null, refreshToken: null, user: null };
+    // corrupted storage — treat as logged out
   }
+  return { refreshToken: null, user: null, remember: false };
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(loadFromStorage);
+function saveSession(refreshToken: string, user: UserDto, remember: boolean) {
+  const primary = remember ? localStorage : sessionStorage;
+  const secondary = remember ? sessionStorage : localStorage;
+  primary.setItem("refreshToken", refreshToken);
+  primary.setItem("user", JSON.stringify(user));
+  // Clear from the other store so there are never two valid sessions
+  secondary.removeItem("refreshToken");
+  secondary.removeItem("user");
+}
 
+function clearSession() {
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("user");
+  sessionStorage.removeItem("refreshToken");
+  sessionStorage.removeItem("user");
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [user, setUser] = useState<UserDto | null>(null);
+  // true while we attempt to restore the session on first paint
+  const [rehydrating, setRehydrating] = useState(true);
+
+  // ── Session restoration on mount ─────────────────────────────────────────
+  useEffect(() => {
+    const { refreshToken, user: storedUser, remember } = getStoredSession();
+
+    if (!refreshToken) {
+      setRehydrating(false);
+      return;
+    }
+
+    // Use the stored user immediately so the UI can render with data while refreshing
+    setUser(storedUser);
+
+    refreshAccessToken(refreshToken)
+      .then((res) => {
+        const data = res.data.data;
+        if (!data) throw new Error("empty refresh response");
+        setAccessToken(data.accessToken);
+        setUser(data.user);
+        setAuthTokens(data.accessToken, data.refreshToken);
+        saveSession(data.refreshToken, data.user, remember);
+      })
+      .catch(() => {
+        // Refresh token expired or invalid — force sign-in
+        clearSession();
+        setAccessToken(null);
+        setUser(null);
+        setAuthTokens(null, null);
+      })
+      .finally(() => setRehydrating(false));
+  // Intentionally empty deps — runs exactly once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Register axios callbacks once ─────────────────────────────────────────
+  useEffect(() => {
+    setOnTokenRefreshed((newAccess, newRefresh) => {
+      setAccessToken(newAccess);
+      // Persist the rotated refresh token in whichever store is currently active
+      const { remember } = getStoredSession();
+      const { user: storedUser } = getStoredSession();
+      if (storedUser) saveSession(newRefresh, storedUser, remember);
+    });
+
+    setOnSessionExpired(() => {
+      clearSession();
+      setAccessToken(null);
+      setUser(null);
+      setAuthTokens(null, null);
+      globalThis.location.href = "/signin";
+    });
+  }, []);
+
+  // ── Login ─────────────────────────────────────────────────────────────────
   const login = useCallback(
-    (accessToken: string, refreshToken: string, user: UserDto) => {
-      localStorage.setItem("accessToken", accessToken);
-      localStorage.setItem("refreshToken", refreshToken);
-      localStorage.setItem("user", JSON.stringify(user));
-      setState({ accessToken, refreshToken, user });
+    (
+      newAccessToken: string,
+      newRefreshToken: string,
+      newUser: UserDto,
+      remember: boolean
+    ) => {
+      setAccessToken(newAccessToken);
+      setUser(newUser);
+      setAuthTokens(newAccessToken, newRefreshToken);
+      saveSession(newRefreshToken, newUser, remember);
     },
-    [],
+    []
   );
 
+  // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
+    const { refreshToken } = getStoredSession();
     try {
-      await logoutApi(state.refreshToken ?? undefined);
+      await logoutApi(refreshToken ?? undefined);
     } catch {
-      // best-effort; clear client state regardless
+      // best-effort — clear client state regardless
     }
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
-    setState({ accessToken: null, refreshToken: null, user: null });
-  }, [state.refreshToken]);
+    clearSession();
+    setAccessToken(null);
+    setUser(null);
+    setAuthTokens(null, null);
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
-        ...state,
-        isAuthenticated: !!state.accessToken,
+        accessToken,
+        user,
+        isAuthenticated: !!accessToken,
+        rehydrating,
         login,
         logout,
       }}
