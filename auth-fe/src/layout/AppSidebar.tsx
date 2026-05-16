@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
 // Assume these icons are imported from an icon library
+import { useSidebar } from "../context/SidebarContext";
 import {
   BoltIcon,
   ChevronDownIcon,
@@ -13,7 +14,6 @@ import {
   PlugInIcon,
   UserCircleIcon,
 } from "../icons";
-import { useSidebar } from "../context/SidebarContext";
 
 type NavItem = {
   name: string;

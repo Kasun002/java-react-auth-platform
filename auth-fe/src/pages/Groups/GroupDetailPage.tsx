@@ -1,277 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import PageMeta from "../../components/common/PageMeta";
 import Badge from "../../components/ui/badge/Badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "../../components/ui/table";
-import {
-  ChevronLeftIcon,
-  GroupIcon,
-  LockIcon,
-  BoltIcon,
-  UserCircleIcon,
-} from "../../icons";
-import {
-  getGroup,
-  listRoles,
-  assignRoleToGroup,
-  removeRoleFromGroup,
-  updateGroup,
-} from "../../services/adminService";
-import type { RoleDto, UserGroupDto, UpdateGroupRequest } from "../../types/admin";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-type BadgeColor = "primary" | "success" | "warning" | "error" | "light";
-
-const PRESET_TYPE_COLORS: Record<string, BadgeColor> = {
-  CUSTOMER: "primary",
-  STAFF: "success",
-  OVERSIGHT: "warning",
-  ADMIN: "error",
-};
-
-function typeColor(type: string): BadgeColor {
-  return PRESET_TYPE_COLORS[type.toUpperCase()] ?? "light";
-}
-
-function apiError(err: unknown): string {
-  const e = err as { response?: { data?: { message?: string } } };
-  return e?.response?.data?.message ?? "An unexpected error occurred";
-}
-
-// ── Edit Group Modal ──────────────────────────────────────────────────────────
-
-interface EditGroupModalProps {
-  group: UserGroupDto;
-  onClose: () => void;
-  onSaved: (g: UserGroupDto) => void;
-}
-
-function EditGroupModal({ group, onClose, onSaved }: EditGroupModalProps) {
-  const [name, setName] = useState(group.name);
-  const [type, setType] = useState(group.type);
-  const [description, setDescription] = useState(group.description ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      const req: UpdateGroupRequest = { name, type, description };
-      const res = await updateGroup(group.id, req);
-      onSaved(res.data.data!);
-      onClose();
-    } catch (err) {
-      setError(apiError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">Edit group</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-          {error && (
-            <div className="rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Name <span className="text-error-500">*</span>
-            </label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">
-              Type <span className="text-error-500">*</span>
-            </label>
-            <input
-              required
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+import { ChevronLeftIcon, GroupIcon, UserCircleIcon } from "../../icons";
+import { getGroup, removeRoleFromGroup } from "../../services/adminService";
+import type { PermissionDto, UserGroupDto } from "../../types/admin";
+import AssignRoleModal from "./AssignRoleModal";
+import EditGroupModal from "./EditGroupModal";
+import GroupOverviewTab from "./GroupOverviewTab";
+import GroupPermissionsTab from "./GroupPermissionsTab";
+import GroupRolesTab from "./GroupRolesTab";
+import { typeColor } from "./groupUtils";
 
 type TabId = "overview" | "roles" | "permissions" | "members";
-
-// ── Assign Role Modal ─────────────────────────────────────────────────────────
-
-interface AssignRoleModalProps {
-  groupId: number;
-  currentRoleIds: number[];
-  onClose: () => void;
-  onAssigned: () => void;
-}
-
-function AssignRoleModal({
-  groupId,
-  currentRoleIds,
-  onClose,
-  onAssigned,
-}: AssignRoleModalProps) {
-  const [availableRoles, setAvailableRoles] = useState<RoleDto[]>([]);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listRoles()
-      .then((res) => {
-        const all = res.data.data ?? [];
-        setAvailableRoles(all.filter((r) => !currentRoleIds.includes(r.id)));
-      })
-      .catch(() => setError("Failed to load roles."));
-  }, [currentRoleIds]);
-
-  async function handleAssign() {
-    if (!selected) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await assignRoleToGroup(groupId, selected);
-      onAssigned();
-      onClose();
-    } catch {
-      setError("Failed to assign role. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
-            Assign role to group
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="px-6 py-4">
-          <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-            Assigning a role grants all users in this group its permissions. Effective permissions update on next login.
-          </p>
-
-          {error && (
-            <div className="mb-3 rounded-lg border border-error-200 bg-error-50 px-4 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:border-error-500/20 dark:text-error-400">
-              {error}
-            </div>
-          )}
-
-          <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700">
-            {availableRoles.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-gray-400">
-                No available roles
-              </p>
-            ) : (
-              availableRoles.map((r) => (
-                <label
-                  key={r.id}
-                  className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 dark:border-gray-800 last:border-0 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${
-                    selected === r.id ? "bg-brand-50 dark:bg-brand-500/10" : ""
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="role-select"
-                    checked={selected === r.id}
-                    onChange={() => setSelected(r.id)}
-                    className="accent-brand-500"
-                  />
-                  <LockIcon className="size-4 text-warning-500 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium font-mono text-gray-800 dark:text-white/90">
-                      {r.name}
-                    </p>
-                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                      {r.description}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs text-gray-400">
-                    {r.permissions.length} perm{r.permissions.length !== 1 ? "s" : ""}
-                  </span>
-                </label>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleAssign}
-            disabled={!selected || saving}
-            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {saving ? "Assigning…" : "Assign role"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -286,19 +27,18 @@ export default function GroupDetailPage() {
 
   const groupId = Number(id);
 
-  function fetchGroup() {
+  const fetchGroup = useCallback(() => {
     setLoading(true);
     setError(null);
     getGroup(groupId)
       .then((res) => setGroup(res.data.data ?? null))
       .catch(() => setError("Failed to load group."))
       .finally(() => setLoading(false));
-  }
+  }, [groupId]);
 
   useEffect(() => {
-    if (!groupId) return;
-    fetchGroup();
-  }, [groupId]);
+    if (groupId) fetchGroup();
+  }, [groupId, fetchGroup]);
 
   async function handleRemoveRole(roleId: number) {
     try {
@@ -337,24 +77,19 @@ export default function GroupDetailPage() {
   }
 
   // Derived data
-  const allPermissions = [
+  const allPermissions: PermissionDto[] = [
     ...new Map(
-      group.roles
-        .flatMap((r) => r.permissions)
-        .map((p) => [p.id, p])
+      group.roles.flatMap((r) => r.permissions).map((p) => [p.id, p])
     ).values(),
   ].sort((a, b) => a.code.localeCompare(b.code));
 
-  const permsByCategory = allPermissions.reduce<Record<string, typeof allPermissions>>(
-    (acc, p) => {
-      if (!acc[p.category]) acc[p.category] = [];
-      acc[p.category].push(p);
-      return acc;
-    },
-    {}
-  );
-
-  const currentRoleIds = group.roles.map((r) => r.id);
+  const permsByCategory = allPermissions.reduce<
+    Record<string, PermissionDto[]>
+  >((acc, p) => {
+    if (!acc[p.category]) acc[p.category] = [];
+    acc[p.category].push(p);
+    return acc;
+  }, {});
 
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
@@ -370,24 +105,19 @@ export default function GroupDetailPage() {
         description={`Group detail and role assignments for ${group.name}`}
       />
 
-      {/* ── Back nav ── */}
       <button
         onClick={() => navigate("/groups")}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
       >
-        <ChevronLeftIcon className="size-4" />
-        Groups
+        <ChevronLeftIcon className="size-4" /> Groups
       </button>
 
-      {/* ── Group header ── */}
+      {/* Group header */}
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] mb-1">
         <div className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-start">
-          {/* Icon */}
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
             <GroupIcon className="size-6 text-gray-500 dark:text-gray-400" />
           </div>
-
-          {/* Info */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold text-gray-800 dark:text-white/90">
@@ -401,13 +131,13 @@ export default function GroupDetailPage() {
               {group.description}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
-              <span>{group.roles.length} role{group.roles.length !== 1 ? "s" : ""}</span>
+              <span>
+                {group.roles.length} role{group.roles.length === 1 ? "" : "s"}
+              </span>
               <span>&middot;</span>
               <span>{allPermissions.length} effective permissions</span>
             </div>
           </div>
-
-          {/* Actions */}
           <div className="flex flex-wrap gap-2 shrink-0">
             <button
               onClick={() => setEditOpen(true)}
@@ -453,239 +183,33 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {/* ── Tab content ── */}
+      {/* Tab content */}
       <div className="mt-4 space-y-4">
-
-        {/* Overview */}
         {activeTab === "overview" && (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Assigned roles */}
-            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
-              <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-5 py-4">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                  Assigned roles
-                </h3>
-                <button
-                  onClick={() => setAssignOpen(true)}
-                  className="text-xs text-brand-500 hover:text-brand-600 font-medium"
-                >
-                  + Add
-                </button>
-              </div>
-              {group.roles.length === 0 ? (
-                <div className="flex flex-col items-center py-10 text-gray-400">
-                  <LockIcon className="size-8 mb-2 text-gray-300 dark:text-gray-700" />
-                  <p className="text-sm">No roles assigned</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {group.roles.map((r) => (
-                    <div
-                      key={r.id}
-                      className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
-                    >
-                      <LockIcon className="size-4 text-warning-500 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium font-mono text-gray-800 dark:text-white/90">
-                          {r.name}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {r.description}
-                        </p>
-                      </div>
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {r.permissions.length} perm{r.permissions.length !== 1 ? "s" : ""}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveRole(r.id)}
-                        className="ml-1 text-xs text-gray-400 hover:text-error-500 dark:hover:text-error-400 transition-colors"
-                        title="Remove role"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Effective permissions by category */}
-            <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
-              <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                  Effective permissions
-                </h3>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {allPermissions.length} permissions across {Object.keys(permsByCategory).length} categories
-                </p>
-              </div>
-              {allPermissions.length === 0 ? (
-                <div className="flex flex-col items-center py-10 text-gray-400">
-                  <BoltIcon className="size-8 mb-2 text-gray-300 dark:text-gray-700" />
-                  <p className="text-sm">No permissions</p>
-                </div>
-              ) : (
-                <div className="p-5 space-y-4">
-                  {Object.entries(permsByCategory).map(([category, perms]) => (
-                    <div key={category}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge color="light" size="sm">{category}</Badge>
-                        <span className="text-xs tabular-nums text-gray-400">{perms.length}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {perms.map((p) => (
-                          <span
-                            key={p.id}
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-mono text-gray-600 dark:text-gray-400"
-                            title={p.description}
-                          >
-                            <BoltIcon className="size-2.5 text-brand-500 shrink-0" />
-                            {p.code}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <GroupOverviewTab
+            roles={group.roles}
+            allPermissions={allPermissions}
+            permsByCategory={permsByCategory}
+            onAssignRole={() => setAssignOpen(true)}
+            onRemoveRole={handleRemoveRole}
+          />
         )}
-
-        {/* Roles tab */}
         {activeTab === "roles" && (
-          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                Assigned roles
-              </h3>
-              <button
-                onClick={() => setAssignOpen(true)}
-                className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 transition-colors"
-              >
-                + Assign role
-              </button>
-            </div>
-            {group.roles.length === 0 ? (
-              <div className="flex flex-col items-center py-12 text-gray-400">
-                <LockIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
-                <p className="text-sm">No roles assigned to this group</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
-                    {["Role", "Description", "Permissions", ""].map((h) => (
-                      <TableCell
-                        key={h}
-                        isHeader
-                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                      >
-                        {h}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {group.roles.map((r) => (
-                    <TableRow
-                      key={r.id}
-                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
-                    >
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <LockIcon className="size-3.5 text-warning-500 shrink-0" />
-                          <span className="text-sm font-medium font-mono text-gray-800 dark:text-white/90">
-                            {r.name}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">
-                        {r.description}
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-sm tabular-nums text-gray-600 dark:text-gray-400">
-                        {r.permissions.length}
-                      </TableCell>
-                      <TableCell className="px-6 py-3">
-                        <button
-                          onClick={() => handleRemoveRole(r.id)}
-                          className="rounded-lg border border-error-200 px-3 py-1 text-xs font-medium text-error-600 hover:bg-error-50 dark:border-error-500/30 dark:text-error-400 dark:hover:bg-error-500/10 transition-colors"
-                        >
-                          Remove
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+          <GroupRolesTab
+            roles={group.roles}
+            onAssignRole={() => setAssignOpen(true)}
+            onRemoveRole={handleRemoveRole}
+          />
         )}
-
-        {/* Permissions tab */}
         {activeTab === "permissions" && (
-          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
-            <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
-                Effective permissions
-              </h3>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                {allPermissions.length} permissions — union of all assigned roles
-              </p>
-            </div>
-            {allPermissions.length === 0 ? (
-              <div className="flex flex-col items-center py-12 text-gray-400">
-                <BoltIcon className="size-10 mb-2 text-gray-300 dark:text-gray-700" />
-                <p className="text-sm">No permissions</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b border-gray-100 dark:border-gray-800">
-                    {["Permission", "Category", "Description"].map((h) => (
-                      <TableCell
-                        key={h}
-                        isHeader
-                        className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
-                      >
-                        {h}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {allPermissions.map((p) => (
-                    <TableRow
-                      key={p.id}
-                      className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors"
-                    >
-                      <TableCell className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <BoltIcon className="size-3.5 text-brand-500 shrink-0" />
-                          <span className="text-xs font-mono text-gray-700 dark:text-gray-300">
-                            {p.code}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-6 py-3">
-                        <Badge color="light" size="sm">{p.category}</Badge>
-                      </TableCell>
-                      <TableCell className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">
-                        {p.description}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+          <GroupPermissionsTab allPermissions={allPermissions} />
         )}
-
-        {/* Members tab */}
         {activeTab === "members" && (
           <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
             <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">Members</h3>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white/90">
+                Members
+              </h3>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                 Users assigned to this group
               </p>
@@ -699,27 +223,23 @@ export default function GroupDetailPage() {
                   onClick={() => navigate("/users")}
                   className="text-brand-500 hover:text-brand-600 underline"
                 >
-                  Users page
+                  Users page.
                 </button>
-                .
               </p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Assign role modal */}
       {assignOpen && (
         <AssignRoleModal
           groupId={groupId}
-          currentRoleIds={currentRoleIds}
+          currentRoleIds={group.roles.map((r) => r.id)}
           onClose={() => setAssignOpen(false)}
           onAssigned={fetchGroup}
         />
       )}
-
-      {/* Edit group modal */}
-      {editOpen && group && (
+      {editOpen && (
         <EditGroupModal
           group={group}
           onClose={() => setEditOpen(false)}

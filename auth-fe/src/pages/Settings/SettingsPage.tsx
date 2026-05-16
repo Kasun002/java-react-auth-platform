@@ -32,11 +32,19 @@ const SECURITY_CONFIG = [
   },
   {
     label: "Lockout",
-    node: <span className="text-sm text-gray-700 dark:text-gray-300">5 failed attempts · 30-min lock</span>,
+    node: (
+      <span className="text-sm text-gray-700 dark:text-gray-300">
+        5 failed attempts · 30-min lock
+      </span>
+    ),
   },
   {
     label: "Password policy",
-    node: <span className="text-sm text-gray-700 dark:text-gray-300">NIST 800-63B · min 12 chars · breach check</span>,
+    node: (
+      <span className="text-sm text-gray-700 dark:text-gray-300">
+        NIST 800-63B · min 12 chars · breach check
+      </span>
+    ),
   },
   {
     label: "Method security",
@@ -64,11 +72,66 @@ const SECURITY_CONFIG = [
   },
 ];
 
+const COMPLIANCE_STANDARDS = [
+  {
+    standard: "PCI-DSS v4",
+    reqs: [
+      "Req 7.2 — Least privilege",
+      "Req 8.6 — MFA",
+      "Req 10.2 — Audit log",
+    ],
+  },
+  {
+    standard: "NIST SP 800-63B",
+    reqs: [
+      "Password length ≥ 12",
+      "Breach corpus check",
+      "No periodic forced rotation",
+    ],
+  },
+  {
+    standard: "ISO 27001",
+    reqs: [
+      "A.9.4.2 — Separation of duties",
+      "A.12.4 — Logging",
+      "A.9.2 — Access provisioning",
+    ],
+  },
+  {
+    standard: "OWASP ASVS L2",
+    reqs: [
+      "V2 — Authentication",
+      "V4 — Access control",
+      "V7 — Error handling & logging",
+    ],
+  },
+];
+
 const MIGRATIONS = [
-  { id: 1, version: "V10", name: "create_rbac_tables", applied: "2026-04-28 11:02:14" },
-  { id: 2, version: "V11", name: "seed_rbac_banking_data", applied: "2026-04-28 11:02:15" },
-  { id: 3, version: "V12", name: "backfill_user_groups", applied: "2026-05-01 09:14:00" },
-  { id: 4, version: "V13", name: "deprecate_role_column", applied: "2026-05-02 03:00:00" },
+  {
+    id: 1,
+    version: "V10",
+    name: "create_rbac_tables",
+    applied: "2026-04-28 11:02:14",
+  },
+  {
+    id: 2,
+    version: "V11",
+    name: "seed_rbac_banking_data",
+    applied: "2026-04-28 11:02:15",
+  },
+  {
+    id: 3,
+    version: "V12",
+    name: "backfill_user_groups",
+    applied: "2026-05-01 09:14:00",
+  },
+  {
+    id: 4,
+    version: "V13",
+    name: "deprecate_role_column",
+    applied: "2026-05-02 03:00:00",
+  },
 ];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -76,10 +139,10 @@ const MIGRATIONS = [
 function ConfigRow({
   label,
   children,
-}: {
+}: Readonly<{
   label: string;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <div className="grid grid-cols-[160px_1fr] items-start border-b border-gray-100 dark:border-gray-800 last:border-0 px-5 py-3">
       <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 pt-0.5">
@@ -111,7 +174,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-
         {/* ── JWT Configuration ── */}
         <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] overflow-hidden">
           <div className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-800 px-5 py-4">
@@ -135,7 +197,9 @@ export default function SettingsPage() {
                     {value}
                   </span>
                 ) : (
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{value}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {value}
+                  </span>
                 )}
               </ConfigRow>
             ))}
@@ -189,24 +253,7 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="p-5 space-y-3">
-            {[
-              {
-                standard: "PCI-DSS v4",
-                reqs: ["Req 7.2 — Least privilege", "Req 8.6 — MFA", "Req 10.2 — Audit log"],
-              },
-              {
-                standard: "NIST SP 800-63B",
-                reqs: ["Password length ≥ 12", "Breach corpus check", "No periodic forced rotation"],
-              },
-              {
-                standard: "ISO 27001",
-                reqs: ["A.9.4.2 — Separation of duties", "A.12.4 — Logging", "A.9.2 — Access provisioning"],
-              },
-              {
-                standard: "OWASP ASVS L2",
-                reqs: ["V2 — Authentication", "V4 — Access control", "V7 — Error handling & logging"],
-              },
-            ].map(({ standard, reqs }) => (
+            {COMPLIANCE_STANDARDS.map(({ standard, reqs }) => (
               <div
                 key={standard}
                 className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
@@ -223,7 +270,9 @@ export default function SettingsPage() {
                       className="flex items-center gap-2.5 px-4 py-2"
                     >
                       <CheckCircleIcon className="size-3.5 text-success-500 shrink-0" />
-                      <span className="text-xs text-gray-600 dark:text-gray-400">{req}</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        {req}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -274,14 +323,15 @@ export default function SettingsPage() {
                     {m.applied}
                   </TableCell>
                   <TableCell className="px-5 py-3">
-                    <Badge color="success" size="sm">SUCCESS</Badge>
+                    <Badge color="success" size="sm">
+                      SUCCESS
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
-
       </div>
     </>
   );
