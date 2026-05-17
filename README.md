@@ -21,7 +21,7 @@ Enterprise authentication and RBAC platform — JWT auth service with Keycloak/L
 
 ```
 fp-be/
-├── auth/               # Spring Boot auth service (port 8080)
+├── auth-be/            # Spring Boot auth service (port 8080)
 ├── auth-fe/            # React admin frontend (port 5173)
 ├── k8s/                # Kubernetes manifests
 ├── docker-compose.yml  # Local infrastructure
