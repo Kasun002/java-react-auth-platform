@@ -207,7 +207,175 @@ cd auth && mvn test
 
 ---
 
-## 9. Production Checklist
+## 9. Database Schema (ERD)
+
+```mermaid
+erDiagram
+    USERS ||--o{ ADDRESSES : has
+    USERS ||--o{ OTP_VERIFICATION : has
+    USERS ||--o{ PASSWORD_HISTORY : has
+    USERS ||--o{ USER_LOG : has
+    USERS ||--o{ USER_ROLE_ASSIGNMENTS : has
+    USERS ||--o{ USER_GROUP_MEMBERSHIPS : has
+    USERS ||--o{ AUDIT_LOG : creates
+    ROLES ||--o{ ROLE_PERMISSIONS : has
+    ROLES ||--o{ GROUP_ROLES : has
+    ROLES ||--o{ USER_ROLE_ASSIGNMENTS : assigned
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : has
+    USER_GROUPS ||--o{ GROUP_ROLES : has
+    USER_GROUPS ||--o{ USER_GROUP_MEMBERSHIPS : has
+    USER_GROUPS ||--o{ AD_GROUP_MAPPINGS : mapped
+
+    USERS {
+        int id PK
+        string name
+        string email UK
+        string phone
+        string password
+        string status
+        string date_of_birth
+        string gender
+        string profile_picture_url
+        int failed_login_attempts
+        string locked_until
+        string last_login_at
+        string password_changed_at
+        string ad_object_id
+        string auth_provider
+        string created_at
+        string updated_at
+    }
+
+    ADDRESSES {
+        int id PK
+        int user_id FK
+        string address_line1
+        string address_line2
+        string street
+        string postal_code
+        string state
+        string country
+    }
+
+    OTP_VERIFICATION {
+        int id PK
+        int user_id FK
+        string otp_hash
+        string expires_at
+        int attempts
+        int used
+        string created_at
+        string updated_at
+    }
+
+    PASSWORD_HISTORY {
+        int id PK
+        int user_id FK
+        string password_hash
+        string created_at
+    }
+
+    USER_LOG {
+        int id PK
+        int user_id FK
+        string user_token
+        string token_type
+        string issued_at
+        string expires_at
+        string ip_address
+        string user_agent
+        string created_at
+        string updated_at
+    }
+
+    ROLES {
+        int id PK
+        string name UK
+        string description
+        string created_at
+        string updated_at
+    }
+
+    PERMISSIONS {
+        int id PK
+        string code UK
+        string description
+        string category
+        string created_at
+        string updated_at
+    }
+
+    ROLE_PERMISSIONS {
+        int role_id PK, FK
+        int permission_id PK, FK
+    }
+
+    USER_ROLE_ASSIGNMENTS {
+        int user_id PK, FK
+        int role_id PK, FK
+        string assigned_at
+    }
+
+    USER_GROUPS {
+        int id PK
+        string name UK
+        string description
+        string type
+        string created_at
+        string updated_at
+    }
+
+    GROUP_ROLES {
+        int group_id PK, FK
+        int role_id PK, FK
+    }
+
+    USER_GROUP_MEMBERSHIPS {
+        int user_id PK, FK
+        int group_id PK, FK
+        string assigned_at
+    }
+
+    AD_GROUP_MAPPINGS {
+        int id PK
+        string ad_group_id UK
+        string ad_group_name
+        int local_group_id FK
+        int auto_created
+        string created_at
+        string updated_at
+    }
+
+    AUDIT_LOG {
+        int id PK
+        int actor_id FK
+        string actor_name
+        string action
+        string resource
+        string resource_id
+        string details
+        string ip_address
+        string status
+        string created_at
+    }
+
+    FLYWAY_SCHEMA_HISTORY {
+        int installed_rank PK
+        string version
+        string description
+        string type
+        string script
+        int checksum
+        string installed_by
+        string installed_on
+        int execution_time
+        int success
+    }
+```
+
+---
+
+## 10. Production Checklist
 
 - [ ] Set `JWT_SECRET` to a cryptographically random ≥ 32-byte value (Vault / KMS)
 - [ ] Set `AD_LDAP_USER_DN` / `AD_LDAP_PASSWORD` to the `svc-ldap` service account from secrets manager
