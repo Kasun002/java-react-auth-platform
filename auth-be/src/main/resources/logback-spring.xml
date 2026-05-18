@@ -24,7 +24,7 @@
     </appender>
 
     <!-- Application packages — DEBUG in dev, override to INFO in prod via application-prod.properties -->
-    <logger name="com.shop.auth" level="DEBUG" additivity="false">
+    <logger name="com.org.auth" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
     </logger>

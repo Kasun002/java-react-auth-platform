@@ -1,7 +1,7 @@
 {
-  "name": "tailadmin-react",
+  "name": "auth-be",
   "private": true,
-  "version": "2.3.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
