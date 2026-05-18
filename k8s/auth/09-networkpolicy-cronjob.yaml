@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NetworkPolicy: OTP Cleanup CronJob
+#
+# Banking standard: default-deny is already applied by the namespace-wide
+# policy in 05-networkpolicy.yaml. This policy grants the minimum egress
+# the cleanup pod requires:
+#
+#   - PostgreSQL (5432) — to execute the DELETE query
+#   - DNS (UDP+TCP 53)  — for hostname resolution of the DB service
+#
+# The cleanup pod needs NO ingress and NO egress to Redis, SQS, SES, LDAP,
+# or any external endpoint. The AWS SDK and Redis clients are instantiated
+# but never make network calls when the cleanup profile is active.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otp-cleanup-allow-egress
+  namespace: shop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: otp-cleanup
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # No ingress rules — cleanup pod accepts no inbound connections
+  ingress: []
+
+  egress:
+    # Allow egress to PostgreSQL (auth-db) only
+    - to:
+        - podSelector:
+            matchLabels:
+              app: auth-db
+      ports:
+        - protocol: TCP
+          port: 5432
+
+    # Allow DNS resolution (required for cluster-internal service names)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

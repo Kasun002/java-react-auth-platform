@@ -32,4 +32,18 @@ public interface OtpVerificationRepository extends JpaRepository<OtpVerification
     @Modifying
     @Query("UPDATE OtpVerification o SET o.used = true WHERE o.user = :user AND o.used = false")
     void invalidateAllUnusedForUser(@Param("user") User user);
+
+    /**
+     * Bulk-deletes all OTP records whose expiry timestamp is before the given cutoff.
+     *
+     * <p>Called exclusively by the OTP cleanup CronJob (cleanup Spring profile).
+     * The cutoff is typically {@code NOW() - retentionHours} so that a short audit
+     * window is preserved before hard deletion.</p>
+     *
+     * @param cutoff records with {@code expiresAt} before this timestamp are deleted
+     * @return number of rows deleted
+     */
+    @Modifying
+    @Query("DELETE FROM OtpVerification o WHERE o.expiresAt < :cutoff")
+    int deleteExpiredBefore(@Param("cutoff") LocalDateTime cutoff);
 }
