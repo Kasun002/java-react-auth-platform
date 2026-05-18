@@ -1,0 +1,200 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OTP Cleanup CronJob
+#
+# Runs once per hour. Spins up a single pod using the same auth-service image
+# with SPRING_PROFILES_ACTIVE=cleanup, which activates OtpCleanupJob and
+# disables the web server, Flyway, and SQS consumer.
+#
+# Banking requirements met:
+#   - concurrencyPolicy: Forbid  — no overlapping cleanup runs
+#   - backoffLimit: 2            — up to 3 total attempts before marking failed
+#   - activeDeadlineSeconds: 300 — pod killed after 5 min (safety valve)
+#   - Non-root, readOnlyRootFilesystem, drop ALL capabilities
+#   - Dedicated ServiceAccount with no RBAC permissions
+#
+# Property precedence note:
+#   Spring Boot resolves: env vars > application-{profile}.properties > application.properties
+#   The ConfigMap sets SPRING_FLYWAY_ENABLED=true and MESSAGING_CONSUMER_ENABLED=true.
+#   Without explicit overrides those env vars would silently override the cleanup profile
+#   settings. The explicit env entries below win because k8s applies env after envFrom.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Dedicated ServiceAccount (principle of least privilege) ──────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otp-cleanup-sa
+  namespace: shop-platform
+  labels:
+    app: otp-cleanup
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: otp-cleanup
+  namespace: shop-platform
+  labels:
+    app: otp-cleanup
+spec:
+  # Run at the top of every hour (UTC)
+  schedule: "0 * * * *"
+  timeZone: "UTC"
+
+  # Never run two cleanup jobs at the same time
+  concurrencyPolicy: Forbid
+
+  # If the job misses its scheduled time by more than 5 minutes (e.g. cluster
+  # was down), skip that run rather than firing multiple catch-up jobs.
+  startingDeadlineSeconds: 300
+
+  # Keep last 3 successful and 5 failed job pods for log inspection
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+
+  jobTemplate:
+    spec:
+      # Retry on failure — up to 2 retries (3 total attempts)
+      backoffLimit: 2
+
+      # Hard deadline: kill the job if still running after 5 minutes.
+      # A normal cleanup run completes in milliseconds to seconds.
+      activeDeadlineSeconds: 300
+
+      template:
+        metadata:
+          labels:
+            app: otp-cleanup
+        spec:
+          serviceAccountName: otp-cleanup-sa
+          automountServiceAccountToken: false
+
+          # Restart the container (not a new pod) on failure
+          restartPolicy: OnFailure
+
+          # ── Pod-level security context (banking standard) ─────────────────
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+
+          containers:
+            - name: otp-cleanup
+              # Use the same image as the main auth-service — no separate build needed
+              image: shop/auth-service:1.0.0
+              imagePullPolicy: Always
+
+              # ── Container-level security context ──────────────────────────
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+
+              # ── Resource limits — cleanup is lightweight ───────────────────
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "512Mi"
+
+              # ── Non-sensitive config: inherit everything from ConfigMap ────
+              # Same approach as the main Deployment — any new ConfigMap key
+              # automatically flows to the cleanup pod without manifest changes.
+              envFrom:
+                - configMapRef:
+                    name: auth-config
+
+              # ── Explicit env: secrets + overrides that win over envFrom ────
+              # k8s applies env entries after envFrom, so these take precedence
+              # for any key that also appears in the ConfigMap.
+              env:
+                # ── Profile activation ─────────────────────────────────────
+                - name: SPRING_PROFILES_ACTIVE
+                  value: "cleanup"
+
+                # ── Distinguish cleanup pod logs from auth-service logs ────
+                - name: SPRING_APPLICATION_NAME
+                  value: "otp-cleanup"
+
+                # ── Override ConfigMap values that must differ in cleanup ──
+                # ConfigMap sets SPRING_FLYWAY_ENABLED=true — must be false
+                # here: schema migration is the main Deployment's responsibility.
+                - name: SPRING_FLYWAY_ENABLED
+                  value: "false"
+                # ConfigMap sets MESSAGING_CONSUMER_ENABLED=true — must be
+                # false: cleanup pod has no SQS egress and no need to poll.
+                - name: MESSAGING_CONSUMER_ENABLED
+                  value: "false"
+
+                # ── Database credentials (from Secret) ────────────────────
+                - name: SPRING_DATASOURCE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: SPRING_DATASOURCE_URL
+                - name: SPRING_DATASOURCE_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: SPRING_DATASOURCE_USERNAME
+                - name: SPRING_DATASOURCE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: SPRING_DATASOURCE_PASSWORD
+
+                # ── Other secrets required by Spring bean initialisation ───
+                # Beans are created but make no network calls in cleanup profile
+                # (web server, SQS consumer, and security filters are disabled).
+                - name: JWT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: JWT_SECRET
+                - name: REDIS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: REDIS_PASSWORD
+                - name: MAIL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: MAIL_PASSWORD
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: AD_LDAP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: auth-secret
+                      key: AD_LDAP_PASSWORD
+
+                # ── Cleanup-specific tuning ────────────────────────────────
+                # How many hours past expiry before a record is hard-deleted.
+                # Increase for a longer audit trail (e.g. 72 for 3-day buffer).
+                - name: OTP_CLEANUP_RETENTION_HOURS
+                  value: "24"
+
+              # ── Writable /tmp required by readOnlyRootFilesystem ──────────
+              volumeMounts:
+                - name: tmp-dir
+                  mountPath: /tmp
+
+          volumes:
+            - name: tmp-dir
+              emptyDir: {}

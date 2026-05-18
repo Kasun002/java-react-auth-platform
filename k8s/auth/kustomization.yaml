@@ -10,3 +10,5 @@ resources:
   - 05-networkpolicy.yaml
   - 06-hpa.yaml
   - 07-pdb.yaml
+  - 08-cronjob.yaml
+  - 09-networkpolicy-cronjob.yaml
