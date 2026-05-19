@@ -53,6 +53,8 @@ public class DashboardStatsDto {
         private long newUsers;
         /** Users with status = DELETED (soft-deleted) */
         private long deleted;
+        /** Users with status = SUSPENDED (temporarily locked by policy or admin) */
+        private long suspended;
         /** Users provisioned via local password registration */
         private long localAuth;
         /** Users provisioned via Azure AD SSO */

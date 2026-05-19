@@ -87,6 +87,7 @@ public class DashboardServiceImpl implements DashboardService {
         us.setInactive(userRepository.countByStatus(UserStatus.INACTIVE));
         us.setNewUsers(userRepository.countByStatus(UserStatus.NEW));
         us.setDeleted(userRepository.countByStatus(UserStatus.DELETED));
+        us.setSuspended(userRepository.countByStatus(UserStatus.SUSPENDED));
         us.setLocalAuth(userRepository.countByAuthProvider(AuthProvider.LOCAL));
         us.setAzureAdAuth(userRepository.countByAuthProvider(AuthProvider.AZURE_AD));
         return us;
@@ -111,7 +112,7 @@ public class DashboardServiceImpl implements DashboardService {
                     gmc.setMemberCount(memberCountById.getOrDefault(g.getId(), 0L));
                     return gmc;
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<CategoryPermCount> buildPermsByCategory() {
@@ -125,7 +126,7 @@ public class DashboardServiceImpl implements DashboardService {
                     cpc.setCount(e.getValue());
                     return cpc;
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<RecentLoginDto> buildRecentLogins() {
@@ -144,6 +145,6 @@ public class DashboardServiceImpl implements DashboardService {
                     dto.setTokenType(ul.getTokenType().name());
                     return dto;
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 }
