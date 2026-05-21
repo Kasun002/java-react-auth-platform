@@ -11,6 +11,7 @@ import com.org.auth.entity.Role;
 import com.org.auth.exception.ResourceNotFoundException;
 import com.org.auth.repository.PermissionRepository;
 import com.org.auth.repository.RoleRepository;
+import com.org.auth.service.AuditHelper;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ class RoleServiceImplTest {
 
     @Mock private RoleRepository       roleRepository;
     @Mock private PermissionRepository permissionRepository;
+    @Mock private AuditHelper          auditHelper;
 
     @InjectMocks private RoleServiceImpl service;
 

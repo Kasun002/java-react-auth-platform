@@ -92,6 +92,19 @@ class AdAuthServiceImplTest {
     private static final String USER_EMAIL     = "alice@corp.example.com";
     private static final String DISPLAY_NAME   = "Alice Smith";
 
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    /**
+     * Inject the mock JwtDecoder into the non-final field before every test.
+     * Mockito @InjectMocks uses constructor injection (from @RequiredArgsConstructor)
+     * which only covers final fields — the jwtDecoder field is set by @PostConstruct
+     * at runtime but @PostConstruct is never invoked in unit tests.
+     */
+    @BeforeEach
+    void injectDecoder() throws Exception {
+        setDecoder(jwtDecoder);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
