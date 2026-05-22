@@ -99,7 +99,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // Step 4 — reject tokens issued before a user-level invalidation event
             // (password change, account suspension, admin-forced logout)
             Long userId = jwtService.extractUserId(token);
-            java.time.Instant issuedAt = jwtService.extractIssuedAt(token).toInstant();
+            java.util.Date issuedAtDate = jwtService.extractIssuedAt(token);
+            if (userId == null || issuedAtDate == null) {
+                writeUnauthorized(response, "Invalid token claims");
+                return;
+            }
+            java.time.Instant issuedAt = issuedAtDate.toInstant();
             if (tokenBlacklistService.isUserTokensInvalidated(userId, issuedAt)) {
                 writeUnauthorized(response, "Session has been invalidated. Please log in again.");
                 return;

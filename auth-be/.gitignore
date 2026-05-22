@@ -35,3 +35,6 @@ build/
 auth.log
 .DS_Store
 /logs
+
+### Local dev overrides — never commit these ###
+src/main/resources/application-local.properties

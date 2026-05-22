@@ -2,7 +2,9 @@ package com.org.auth.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
@@ -29,6 +31,7 @@ import lombok.Data;
  * </pre>
  */
 @Data
+@Validated
 @Configuration
 @ConfigurationProperties(prefix = "app.ad")
 public class AdAuthProperties {
@@ -42,6 +45,7 @@ public class AdAuthProperties {
      * Keycloak:
      * http://localhost:8180/realms/corporate/protocol/openid-connect/certs
      */
+    @NotBlank(message = "app.ad.jwks-uri must be set when AD auth is enabled")
     private String jwksUri;
 
     /**
@@ -49,12 +53,14 @@ public class AdAuthProperties {
      * Azure AD: https://login.microsoftonline.com/{tenantId}/v2.0
      * Keycloak: http://localhost:8180/realms/corporate
      */
+    @NotBlank(message = "app.ad.issuer must be set when AD auth is enabled")
     private String issuer;
 
     /**
      * Expected {@code aud} (audience) claim — typically the client/application ID.
      * The decoder accepts the token only when this value appears in the aud claim.
      */
+    @NotBlank(message = "app.ad.audience must be set when AD auth is enabled")
     private String audience;
 
     /**

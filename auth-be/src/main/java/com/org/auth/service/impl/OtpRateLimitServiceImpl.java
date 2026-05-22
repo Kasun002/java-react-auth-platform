@@ -41,8 +41,8 @@ public class OtpRateLimitServiceImpl implements OtpRateLimitService {
         String key = PREFIX + userId;
         Long count = redisTemplate.opsForValue().increment(key);
         if (count == null) {
-            log.warn("Redis INCR returned null for key=[{}] — allowing resend as safe fallback", key);
-            return true;
+            log.warn("Redis INCR returned null for key=[{}] — blocking resend (fail-secure)", key);
+            return false;
         }
         if (count == 1L) {
             // First resend in this window — set the 1-hour expiry

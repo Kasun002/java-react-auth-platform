@@ -193,6 +193,13 @@
 							<artifactId>lombok</artifactId>
 						</exclude>
 					</excludes>
+					<!-- Activate 'local' profile for mvn spring-boot:run so that
+					     application-local.properties (gitignored) is loaded and provides
+					     the dev JWT secret.  Override with -Dspring-boot.run.profiles=<env>
+					     for other local scenarios (e.g. -Dspring-boot.run.profiles=staging). -->
+					<profiles>
+						<profile>local</profile>
+					</profiles>
 				</configuration>
 			</plugin>
 			<!--
