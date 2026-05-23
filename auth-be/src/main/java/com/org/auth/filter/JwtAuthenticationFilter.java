@@ -135,7 +135,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.debug("JWT authenticated — email=[{}] permissions=[{}]", email, permissions.size());
 
         } catch (Exception e) {
-            log.warn("JWT filter rejected token: {}", e.getMessage());
+            // L6: log only the exception type, never the message — JJWT messages can
+            // contain token structure details that aid targeted attacks.
+            log.warn("JWT filter rejected token: {}", e.getClass().getSimpleName());
             writeUnauthorized(response, "Invalid or expired token");
             return;
         }

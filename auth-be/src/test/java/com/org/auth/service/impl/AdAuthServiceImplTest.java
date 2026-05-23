@@ -637,7 +637,7 @@ class AdAuthServiceImplTest {
         }
 
         @Test
-        @DisplayName("Throws AdAuthenticationException for INACTIVE users")
+        @DisplayName("Throws AdAuthenticationException for INACTIVE users — generic message does not leak status")
         void shouldBlockInactiveUser() {
             User inactive = activeAdUser(1L);
             inactive.setStatus(UserStatus.INACTIVE);
@@ -645,11 +645,12 @@ class AdAuthServiceImplTest {
 
             assertThatThrownBy(() -> service.adLogin(request()))
                     .isInstanceOf(AdAuthenticationException.class)
-                    .hasMessageContaining("inactive");
+                    .hasMessageContaining("access denied")
+                    .hasMessageNotContaining("inactive");
         }
 
         @Test
-        @DisplayName("Throws AdAuthenticationException for DELETED (soft-deleted) users")
+        @DisplayName("Throws AdAuthenticationException for DELETED (soft-deleted) users — generic message does not leak status")
         void shouldBlockDeletedUser() {
             User deleted = activeAdUser(2L);
             deleted.setStatus(UserStatus.DELETED);
@@ -657,11 +658,12 @@ class AdAuthServiceImplTest {
 
             assertThatThrownBy(() -> service.adLogin(request()))
                     .isInstanceOf(AdAuthenticationException.class)
-                    .hasMessageContaining("deleted");
+                    .hasMessageContaining("access denied")
+                    .hasMessageNotContaining("deleted");
         }
 
         @Test
-        @DisplayName("Throws AdAuthenticationException for SUSPENDED users (PCI-DSS — security fix)")
+        @DisplayName("Throws AdAuthenticationException for SUSPENDED users — generic message does not leak status")
         void shouldBlockSuspendedUser() {
             User suspended = activeAdUser(3L);
             suspended.setStatus(UserStatus.SUSPENDED);
@@ -669,7 +671,8 @@ class AdAuthServiceImplTest {
 
             assertThatThrownBy(() -> service.adLogin(request()))
                     .isInstanceOf(AdAuthenticationException.class)
-                    .hasMessageContaining("suspended");
+                    .hasMessageContaining("access denied")
+                    .hasMessageNotContaining("suspended");
         }
 
         @Test

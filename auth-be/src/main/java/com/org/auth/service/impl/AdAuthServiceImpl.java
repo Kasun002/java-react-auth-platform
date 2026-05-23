@@ -129,8 +129,7 @@ public class AdAuthServiceImpl implements AdAuthService {
         if (user.getStatus() == UserStatus.INACTIVE
                 || user.getStatus() == UserStatus.DELETED
                 || user.getStatus() == UserStatus.SUSPENDED) {
-            throw new AdAuthenticationException(
-                    "account is " + user.getStatus().name().toLowerCase());
+            throw new AdAuthenticationException("account access denied");
         }
 
         // Step 5: sync LDAP groups
@@ -181,7 +180,7 @@ public class AdAuthServiceImpl implements AdAuthService {
                 List<String> audiences = jwt.getAudience();
                 if (audiences == null || !audiences.contains(props.getAudience())) {
                     throw new AdAuthenticationException(
-                            "audience mismatch — token does not contain audience: " + props.getAudience());
+                            "audience mismatch — token does not contain expected audience");
                 }
             }
 
@@ -247,7 +246,11 @@ public class AdAuthServiceImpl implements AdAuthService {
         List<AdLdapGroupService.LdapGroup> ldapGroups = ldapGroupService.getGroupsForUser(userEmail);
 
         if (ldapGroups.isEmpty()) {
-            log.debug("No LDAP groups returned for email=[{}]", MaskingUtil.maskEmail(userEmail));
+            // M4: warn-level so LDAP outages surface in production monitoring;
+            // cannot distinguish "user has no groups" from "LDAP unavailable" here —
+            // the LDAP service layer logs the specific error when a failure occurs.
+            log.warn("No LDAP groups returned for email=[{}] — LDAP may be unavailable or user has no memberships",
+                    MaskingUtil.maskEmail(userEmail));
             // On first login with no LDAP groups, assign the configured default group.
             // We do NOT clear existing memberships here — LDAP may be temporarily
             // unavailable and stripping groups would break access.
