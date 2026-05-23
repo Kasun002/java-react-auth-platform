@@ -41,15 +41,12 @@ public class AdAuthController {
         private final AdAuthService adAuthService;
 
         @Operation(summary = "Exchange an Azure AD ID token for a service JWT pair", description = "Validates the OIDC ID token issued by Azure AD (or Keycloak in dev), "
-                        +
-                        "provisions the user on first login, syncs LDAP group memberships, " +
-                        "and returns an access + refresh token pair.")
-
+                        + "provisions the user on first login, syncs LDAP group memberships, "
+                        + "and returns an access + refresh token pair.")
         @ApiResponse(responseCode = "200", description = "Login successful", content = @Content(schema = @Schema(implementation = LoginResponseDto.class)))
         @ApiResponse(responseCode = "400", description = "Validation error — idToken is blank")
         @ApiResponse(responseCode = "401", description = "Invalid, expired, or untrusted ID token")
         @ApiResponse(responseCode = "503", description = "AD login feature disabled on this server")
-
         @PostMapping("/login")
         public ResponseEntity<ResponseDto<LoginResponseDto>> adLogin(
                         @Valid @RequestBody AdLoginRequestDto request) {

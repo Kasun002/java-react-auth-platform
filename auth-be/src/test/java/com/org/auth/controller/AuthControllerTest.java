@@ -10,19 +10,21 @@ import com.org.auth.dto.RegisterRequestDto;
 import com.org.auth.dto.UserDto;
 import com.org.auth.dto.ResendOtpRequestDto;
 import com.org.auth.dto.VerifyOtpRequestDto;
+import com.org.auth.exception.AccountLockedException;
 import com.org.auth.exception.EmailAlreadyExistsException;
+import com.org.auth.exception.InvalidCredentialsException;
 import com.org.auth.exception.OtpExpiredException;
 import com.org.auth.exception.OtpInvalidException;
 import com.org.auth.exception.OtpMaxAttemptsException;
 import com.org.auth.exception.OtpResendLimitException;
-import com.org.auth.exception.AccountLockedException;
-import com.org.auth.exception.InvalidCredentialsException;
+import com.org.auth.exception.TooManyLoginAttemptsException;
 import com.org.auth.exception.UserNotActiveException;
 import com.org.auth.exception.handler.GlobalExceptionHandler;
 import com.org.auth.fixtures.AddressDtoFixture;
 import com.org.auth.fixtures.LoginRequestDtoFixture;
 import com.org.auth.fixtures.RegisterRequestDtoFixture;
 import com.org.auth.service.AuthService;
+import com.org.auth.service.LoginRateLimitService;
 import com.org.auth.utils.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +45,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,7 +58,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @MockitoSettings(strictness = Strictness.STRICT_STUBS)
 class AuthControllerTest {
 
-    @Mock private AuthService authService;
+    @Mock private AuthService           authService;
+    @Mock private LoginRateLimitService loginRateLimitService;
 
     private MockMvc      mockMvc;
     private ObjectMapper objectMapper;
@@ -66,8 +70,11 @@ class AuthControllerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
+        // Allow login by default; individual tests can override.
+        // lenient() is required because not every nested class exercises /auth/login.
+        lenient().when(loginRateLimitService.checkAndIncrement(any())).thenReturn(true);
         mockMvc = MockMvcBuilders
-            .standaloneSetup(new AuthController(authService))
+            .standaloneSetup(new AuthController(authService, loginRateLimitService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
     }
@@ -357,6 +364,21 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value("FAIL"))
                 .andExpect(jsonPath("$.message", containsString("locked")));
+        }
+
+        @Test
+        @DisplayName("Should return 429 TOO_MANY_REQUESTS when IP login rate limit is exceeded")
+        void shouldReturn429WhenLoginRateLimitExceeded() throws Exception {
+            when(loginRateLimitService.checkAndIncrement(any())).thenReturn(false);
+
+            mockMvc.perform(post(LOGIN_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(LoginRequestDtoFixture.valid())))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.status").value("FAIL"))
+                .andExpect(jsonPath("$.message", containsString("Too many login attempts")));
+
+            verify(authService, never()).login(any());
         }
     }
 

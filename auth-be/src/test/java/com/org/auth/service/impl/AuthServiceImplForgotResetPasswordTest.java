@@ -179,6 +179,16 @@ class AuthServiceImplForgotResetPasswordTest {
         }
 
         @Test
+        @DisplayName("Should throw PasswordResetTokenException when stored value is not a valid user ID — corrupt Redis data")
+        void shouldThrowWhenStoredValueIsNotAValidUserId() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            when(valueOps.get(REDIS_KEY)).thenReturn("not-a-number");
+
+            assertThatThrownBy(() -> authService.resetPassword(buildRequest(RAW_TOKEN, "NewPass@456")))
+                    .isInstanceOf(PasswordResetTokenException.class);
+        }
+
+        @Test
         @DisplayName("Should throw PasswordResetTokenException when stored user ID has no matching user")
         void shouldThrowWhenUserNotFound() {
             when(redisTemplate.opsForValue()).thenReturn(valueOps);

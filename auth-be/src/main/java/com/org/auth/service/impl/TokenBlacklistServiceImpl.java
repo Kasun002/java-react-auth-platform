@@ -76,7 +76,14 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
         String raw = redisTemplate.opsForValue().get(USER_PREFIX + userId);
         if (raw == null)
             return false;
-        long invalidatedAtEpoch = Long.parseLong(raw);
+        long invalidatedAtEpoch;
+        try {
+            invalidatedAtEpoch = Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            log.error("Corrupt user invalidation record for userId=[{}] value=[{}] — treating as not invalidated",
+                    userId, raw);
+            return false;
+        }
         return tokenIssuedAt.getEpochSecond() < invalidatedAtEpoch;
     }
 }

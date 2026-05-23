@@ -191,5 +191,14 @@ class TokenBlacklistServiceImplTest {
             // epochSecond of token == invalidatedAtEpoch → not strictly less → returns false
             assertThat(tokenBlacklistService.isUserTokensInvalidated(99L, sameInstant)).isFalse();
         }
+
+        @Test
+        @DisplayName("Should return false and not throw when Redis contains a corrupt non-numeric value")
+        void shouldReturnFalseWhenRedisValueIsCorrupt() {
+            when(valueOps.get("user:tokens:invalidated:42")).thenReturn("not-a-number");
+
+            // Must not throw NumberFormatException — fails-secure by returning false
+            assertThat(tokenBlacklistService.isUserTokensInvalidated(42L, Instant.now())).isFalse();
+        }
     }
 }

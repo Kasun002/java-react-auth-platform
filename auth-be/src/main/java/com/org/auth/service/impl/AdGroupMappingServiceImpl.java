@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.org.auth.exception.ConflictException;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,6 +86,11 @@ public class AdGroupMappingServiceImpl implements AdGroupMappingService {
     @Override
     @Transactional
     public AdGroupMappingDto create(CreateAdGroupMappingRequestDto request) {
+        if (adGroupMappingRepository.existsByAdGroupId(request.getAdGroupId())) {
+            throw new ConflictException(
+                    "A mapping for AD group ID '" + request.getAdGroupId() + "' already exists");
+        }
+
         UserGroup localGroup = userGroupRepository.findById(request.getLocalGroupId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "UserGroup", request.getLocalGroupId()));
@@ -95,6 +102,11 @@ public class AdGroupMappingServiceImpl implements AdGroupMappingService {
         mapping.setAutoCreated(false);
 
         return toDto(adGroupMappingRepository.save(mapping));
+    }
+
+    @Override
+    public Optional<UserGroup> getDefaultGroup() {
+        return userGroupRepository.findByName(props.getDefaultGroupName());
     }
 
     @Override

@@ -19,7 +19,9 @@ import com.org.auth.dto.ResendOtpRequestDto;
 import com.org.auth.dto.ResetPasswordRequestDto;
 import com.org.auth.dto.ResponseDto;
 import com.org.auth.dto.VerifyOtpRequestDto;
+import com.org.auth.exception.TooManyLoginAttemptsException;
 import com.org.auth.service.AuthService;
+import com.org.auth.service.LoginRateLimitService;
 import com.org.auth.utils.MaskingUtil;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,7 +41,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AuthController {
 
-        private final AuthService authService;
+        private final AuthService           authService;
+        private final LoginRateLimitService loginRateLimitService;
 
         @Operation(summary = "Register a new user", description = "Creates a new user account. Defaults role to USER and status to NEW if not provided.")
         @ApiResponse(responseCode = "201", description = "User registered successfully", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
@@ -66,9 +69,16 @@ public class AuthController {
         @ApiResponse(responseCode = "401", description = "Invalid email or password", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @ApiResponse(responseCode = "403", description = "Account is not active", content = @Content(schema = @Schema(implementation = ResponseDto.class)))
         @PostMapping("/login")
-        public ResponseEntity<ResponseDto<LoginResponseDto>> login(@Valid @RequestBody LoginRequestDto request) {
+        public ResponseEntity<ResponseDto<LoginResponseDto>> login(
+                        HttpServletRequest httpRequest,
+                        @Valid @RequestBody LoginRequestDto request) {
                 log.info("Login request received for username/email=[{}]",
                                 MaskingUtil.maskEmail(request.getUsername()));
+
+                String clientIp = resolveClientIp(httpRequest);
+                if (!loginRateLimitService.checkAndIncrement(clientIp)) {
+                        throw new TooManyLoginAttemptsException();
+                }
 
                 LoginResponseDto loginResponse = authService.login(request);
 
@@ -124,7 +134,7 @@ public class AuthController {
                         HttpServletRequest httpRequest,
                         @Valid @RequestBody ChangePasswordRequestDto body) {
 
-                String accessToken = httpRequest.getHeader("Authorization").substring(7);
+                String accessToken = extractBearerToken(httpRequest);
                 log.info("Change-password request received");
                 authService.changePassword(accessToken, body);
 
@@ -202,7 +212,7 @@ public class AuthController {
                 // The Authorization header is guaranteed to be present and valid at this point
                 // because JwtAuthenticationFilter has already validated it before this method
                 // runs.
-                String accessToken = httpRequest.getHeader("Authorization").substring(7);
+                String accessToken = extractBearerToken(httpRequest);
                 String refreshToken = body != null ? body.getRefreshToken() : null;
 
                 log.info("Logout request received");
@@ -212,5 +222,24 @@ public class AuthController {
                 response.setStatus(ResponseDto.Status.SUCCESS);
                 response.setMessage("Logged out successfully");
                 return ResponseEntity.ok(response);
+        }
+
+        // ── Private helpers ──────────────────────────────────────────────────────
+
+        private String extractBearerToken(HttpServletRequest request) {
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                        throw new com.org.auth.exception.BusinessException(
+                                "Missing or invalid Authorization header", HttpStatus.UNAUTHORIZED);
+                }
+                return authHeader.substring(7);
+        }
+
+        private String resolveClientIp(HttpServletRequest request) {
+                String forwarded = request.getHeader("X-Forwarded-For");
+                if (forwarded != null && !forwarded.isBlank()) {
+                        return forwarded.split(",")[0].trim();
+                }
+                return request.getRemoteAddr();
         }
 }

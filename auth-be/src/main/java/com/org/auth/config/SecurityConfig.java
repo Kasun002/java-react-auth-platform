@@ -111,7 +111,6 @@ public class SecurityConfig {
                                 "/auth/forgot-password",
                                 "/auth/reset-password")
                         .permitAll()
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -132,7 +131,7 @@ public class SecurityConfig {
 
     @Bean
     PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(12);
     }
 
     // ── CORS ──────────────────────────────────────────────────────────────────

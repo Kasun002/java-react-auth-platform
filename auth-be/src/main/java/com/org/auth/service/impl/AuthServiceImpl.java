@@ -82,7 +82,7 @@ public class AuthServiceImpl implements AuthService {
      * when a user is not found. Ensures user-not-found and wrong-password paths
      * take the same amount of time, preventing user-enumeration via timing.
      */
-    private static final String DUMMY_BCRYPT_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private static final String DUMMY_BCRYPT_HASH = "$2b$12$pDIe16NHGxXcNxGuJZyrWedVTN2rdJPusueBReV89TRtXgGJjzRLK";
 
     @Value("${app.security.password.max-age-days:90}")
     private int passwordMaxAgeDays;
@@ -360,15 +360,17 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidTokenException();
         }
 
-        // Issue new token pair BEFORE blacklisting the old refresh token
+        // M5: blacklist the old refresh token FIRST — if new-token generation fails
+        // after this point the old token is already revoked, preventing a window
+        // where both the old and new tokens would be simultaneously valid.
+        revokeToken(token, "refresh");
+
+        // Issue new token pair
         String newAccessToken = jwtService.generateAccessToken(user);
         String newRefreshToken = jwtService.generateRefreshToken(user);
 
         persistUserLog(user, newAccessToken, TokenType.ACCESS);
         persistUserLog(user, newRefreshToken, TokenType.REFRESH);
-
-        // Rotate: blacklist the consumed refresh token so it cannot be reused
-        revokeToken(token, "refresh");
 
         log.info("Token refresh successful — email=[{}]", MaskingUtil.maskEmail(email));
         return new RefreshTokenResponseDto(newAccessToken, newRefreshToken);
@@ -405,8 +407,11 @@ public class AuthServiceImpl implements AuthService {
         log.info("Forgot-password request for email=[{}]", MaskingUtil.maskEmail(email));
 
         userRepository.findByEmail(email).ifPresent(user -> {
-            // Generate a cryptographically random token — never stored in plain text
-            String rawToken = UUID.randomUUID().toString();
+            // L5: use 256-bit SecureRandom token (banking standard) instead of
+            // UUID v4 (122-bit entropy) for the password reset link.
+            byte[] tokenBytes = new byte[32];
+            new java.security.SecureRandom().nextBytes(tokenBytes);
+            String rawToken = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
             String tokenHash = HashUtil.sha256Hex(rawToken);
 
             long ttlSeconds = (long) passwordResetTokenTtlMinutes * 60;
@@ -445,7 +450,13 @@ public class AuthServiceImpl implements AuthService {
             throw new PasswordResetTokenException();
         }
 
-        Long userId = Long.parseLong(userIdStr);
+        Long userId;
+        try {
+            userId = Long.parseLong(userIdStr);
+        } catch (NumberFormatException e) {
+            log.error("Corrupt password-reset token record — stored value=[{}] is not a valid user ID", userIdStr);
+            throw new PasswordResetTokenException();
+        }
         User user = userRepository.findById(userId)
                 .orElseThrow(PasswordResetTokenException::new);
 

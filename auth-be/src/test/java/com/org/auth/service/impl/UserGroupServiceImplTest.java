@@ -14,6 +14,7 @@ import com.org.auth.exception.ResourceNotFoundException;
 import com.org.auth.repository.RoleRepository;
 import com.org.auth.repository.UserGroupRepository;
 import com.org.auth.repository.UserRepository;
+import com.org.auth.service.AuditHelper;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +42,7 @@ class UserGroupServiceImplTest {
     @Mock private UserGroupRepository userGroupRepository;
     @Mock private RoleRepository      roleRepository;
     @Mock private UserRepository      userRepository;
+    @Mock private AuditHelper         auditHelper;
 
     @InjectMocks private UserGroupServiceImpl service;
 

@@ -289,6 +289,46 @@ class JwtAuthenticationFilterTest {
         }
     }
 
+    // ── Null claims (C2) — crafted tokens missing userId / iat ───────────────
+
+    @Nested
+    @DisplayName("Null claims rejection")
+    class NullClaimsRejection {
+
+        @Test
+        @DisplayName("Should return 401 when token is valid but missing userId claim")
+        void shouldReturn401WhenUserIdIsNull() throws Exception {
+            request.addHeader("Authorization", "Bearer " + VALID_TOKEN);
+            when(jwtService.isTokenValid(VALID_TOKEN)).thenReturn(true);
+            when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
+            when(jwtService.extractJti(VALID_TOKEN)).thenReturn("some-jti");
+            when(tokenBlacklistService.isBlacklisted("some-jti")).thenReturn(false);
+            when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(null);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(401);
+            verify(filterChain, never()).doFilter(request, response);
+        }
+
+        @Test
+        @DisplayName("Should return 401 when token is valid but missing iat claim")
+        void shouldReturn401WhenIssuedAtIsNull() throws Exception {
+            request.addHeader("Authorization", "Bearer " + VALID_TOKEN);
+            when(jwtService.isTokenValid(VALID_TOKEN)).thenReturn(true);
+            when(jwtService.extractTokenType(VALID_TOKEN)).thenReturn(TokenType.ACCESS.name());
+            when(jwtService.extractJti(VALID_TOKEN)).thenReturn("some-jti");
+            when(tokenBlacklistService.isBlacklisted("some-jti")).thenReturn(false);
+            when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(42L);
+            when(jwtService.extractIssuedAt(VALID_TOKEN)).thenReturn(null);
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(401);
+            verify(filterChain, never()).doFilter(request, response);
+        }
+    }
+
     // ── User-level session invalidation (Step 4) ──────────────────────────────
 
     @Nested

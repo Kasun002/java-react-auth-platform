@@ -192,11 +192,19 @@ public class JwtServiceImpl implements JwtService {
     }
 
     private <T> T extractClaim(String token, Function<Claims, T> resolver) {
+        // L4: require the correct issuer on every parse so tokens from other services
+        // (even if signed with the same key) are rejected.
         Claims claims = Jwts.parser()
                 .verifyWith(cachedSigningKey)
+                .requireIssuer(ISSUER)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+        // L4: validate audience manually — JJWT 0.12.x stores aud as Set<String>.
+        Set<String> audience = claims.getAudience();
+        if (audience == null || !audience.contains(AUDIENCE)) {
+            throw new JwtException("Token audience is not trusted");
+        }
         return resolver.apply(claims);
     }
 }

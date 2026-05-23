@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -126,10 +125,11 @@ public class AdAuthServiceImpl implements AdAuthService {
         // Step 3: find or provision the local user
         User user = findOrProvisionUser(adObjectId, userEmail, displayName);
 
-        // Step 4: account must not be locked / explicitly disabled
-        if (user.getStatus() == UserStatus.INACTIVE || user.getStatus() == UserStatus.DELETED) {
-            throw new AdAuthenticationException(
-                    "account is " + user.getStatus().name().toLowerCase());
+        // Step 4: account must not be locked / explicitly disabled (PCI-DSS Req 8.2.6)
+        if (user.getStatus() == UserStatus.INACTIVE
+                || user.getStatus() == UserStatus.DELETED
+                || user.getStatus() == UserStatus.SUSPENDED) {
+            throw new AdAuthenticationException("account access denied");
         }
 
         // Step 5: sync LDAP groups
@@ -164,12 +164,14 @@ public class AdAuthServiceImpl implements AdAuthService {
         try {
             Jwt jwt = jwtDecoder.decode(rawToken);
 
-            // Validate issuer if configured
+            // Validate issuer if configured — error is intentionally generic to avoid
+            // leaking internal JWKS/issuer configuration to the caller.
             if (props.getIssuer() != null && !props.getIssuer().isBlank()) {
                 String iss = jwt.getIssuer() != null ? jwt.getIssuer().toString() : null;
                 if (!props.getIssuer().equals(iss)) {
-                    throw new AdAuthenticationException("issuer mismatch: expected ["
-                            + props.getIssuer() + "] got [" + iss + "]");
+                    log.warn("AD ID token issuer mismatch: expected=[{}] got=[{}]",
+                            props.getIssuer(), iss);
+                    throw new AdAuthenticationException("token issuer is not trusted");
                 }
             }
 
@@ -178,7 +180,7 @@ public class AdAuthServiceImpl implements AdAuthService {
                 List<String> audiences = jwt.getAudience();
                 if (audiences == null || !audiences.contains(props.getAudience())) {
                     throw new AdAuthenticationException(
-                            "audience mismatch — token does not contain audience: " + props.getAudience());
+                            "audience mismatch — token does not contain expected audience");
                 }
             }
 
@@ -244,12 +246,19 @@ public class AdAuthServiceImpl implements AdAuthService {
         List<AdLdapGroupService.LdapGroup> ldapGroups = ldapGroupService.getGroupsForUser(userEmail);
 
         if (ldapGroups.isEmpty()) {
-            log.debug("No LDAP groups returned for email=[{}] — group membership unchanged",
+            // M4: warn-level so LDAP outages surface in production monitoring;
+            // cannot distinguish "user has no groups" from "LDAP unavailable" here —
+            // the LDAP service layer logs the specific error when a failure occurs.
+            log.warn("No LDAP groups returned for email=[{}] — LDAP may be unavailable or user has no memberships",
                     MaskingUtil.maskEmail(userEmail));
-            // On first login with no LDAP groups, assign the default group
+            // On first login with no LDAP groups, assign the configured default group.
+            // We do NOT clear existing memberships here — LDAP may be temporarily
+            // unavailable and stripping groups would break access.
             if (user.getGroups().isEmpty()) {
-                groupMappingService.resolveLocalGroups(List.of())
-                        .forEach(g -> user.getGroups().add(g));
+                groupMappingService.getDefaultGroup()
+                        .ifPresent(g -> user.getGroups().add(g));
+                log.debug("Assigned default group to new AD user email=[{}]",
+                        MaskingUtil.maskEmail(userEmail));
             }
             return;
         }
@@ -273,11 +282,11 @@ public class AdAuthServiceImpl implements AdAuthService {
                     dto.setCountry(a.getCountry());
                     return dto;
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         List<String> groupNames = user.getGroups().stream()
                 .map(UserGroup::getName)
-                .collect(Collectors.toList());
+                .toList();
 
         Set<String> roleNames = new LinkedHashSet<>();
         user.getGroups().forEach(g -> g.getRoles().forEach(r -> roleNames.add(r.getName())));
