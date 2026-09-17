@@ -20,7 +20,7 @@ Enterprise authentication and RBAC platform — JWT auth service with Keycloak/L
 ## Project Structure
 
 ```
-fp-be/
+java-react-auth-platform/
 ├── auth-be/            # Spring Boot auth service (port 8080)
 ├── auth-fe/            # React admin frontend (port 5173)
 ├── k8s/                # Kubernetes manifests
@@ -95,7 +95,7 @@ aws --endpoint-url=http://localhost:4566 ses verify-email-identity \
 ## 4. Start the Backend
 
 ```bash
-cd auth
+cd auth-be
 mvn spring-boot:run
 ```
 
@@ -192,7 +192,7 @@ docker compose down
 docker compose rm -sf openldap && docker compose up -d openldap
 
 # Wipe Keycloak data and start fresh
-docker compose rm -sf keycloak && docker volume rm fp-be_keycloak_data && docker compose up -d keycloak
+docker compose rm -sf keycloak && docker volume rm keycloak_data && docker compose up -d keycloak
 
 # Re-verify SES sender after LocalStack restart
 aws --endpoint-url=http://localhost:4566 ses verify-email-identity \
@@ -202,7 +202,7 @@ aws --endpoint-url=http://localhost:4566 ses verify-email-identity \
 docker compose logs -f auth-db
 
 # Run backend tests
-cd auth && mvn test
+cd auth-be && mvn test
 ```
 
 ---

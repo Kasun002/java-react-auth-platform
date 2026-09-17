@@ -10,7 +10,7 @@
 
 ## 1. Start infrastructure
 
-From the repository root (`fp-be/`):
+From the repository root:
 
 ```bash
 docker compose up -d
@@ -48,7 +48,7 @@ Everything else (JWT secret, DB, Redis, AWS LocalStack) works out of the box.
 ## 3. Run the application
 
 ```bash
-cd auth
+cd auth-be
 mvn spring-boot:run
 ```
 

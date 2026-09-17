@@ -12,7 +12,7 @@ Everything below is a **one-time setup** — data persists as long as the contai
 ## Prerequisites
 
 ```bash
-# From fp-be/ root — start Keycloak (and all other services)
+# From repo root — start Keycloak (and all other services)
 docker compose up -d
 ```
 
@@ -61,8 +61,8 @@ After saving, the top-left dropdown will show **`corporate`**. All remaining ste
 - Click **Next**
 
 **Login settings tab:**
-- Valid redirect URIs: `http://localhost:3000/*`  (add `http://localhost:4200/*` if needed)
-- Web origins: `http://localhost:3000`
+- Valid redirect URIs: `http://localhost:5173/*`, `http://localhost:5174/*`
+- Web origins: `http://localhost:5173`
 - Click **Save**
 
 ---
@@ -88,13 +88,13 @@ Repeat for each user below.
 | `bob@corp.example.com` | Bob | Staff | `Bob@Pass1!` | GRP-BANK-STAFF |
 | `carol@corp.example.com` | Carol | Admin | `Carol@Pass1!` | GRP-SYSTEM-ADMINS |
 
-> These passwords match the entries in `auth/docker/ldap/bootstrap.ldif`.
+> These passwords match the entries in `auth-be/docker/ldap/bootstrap.ldif`.
 
 ---
 
 ## Step 5 — Enable AD mode in `application.properties`
 
-Add or update these properties in `auth/src/main/resources/application.properties`
+Add or update these properties in `auth-be/src/main/resources/application.properties`
 (or export as environment variables):
 
 ```properties
