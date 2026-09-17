@@ -1,23 +1,22 @@
 package com.org.auth.service.impl;
-import com.org.auth.service.AdAuthService;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import com.org.auth.config.AdAuthProperties;
-import com.org.auth.config.AdAuthProperties.UnmappedGroupStrategy;
-import com.org.auth.dto.AdLoginRequestDto;
-import com.org.auth.dto.LoginResponseDto;
-import com.org.auth.entity.Address;
-import com.org.auth.entity.User;
-import com.org.auth.entity.UserGroup;
-import com.org.auth.exception.AdAuthenticationException;
-import com.org.auth.repository.UserLogRepository;
-import com.org.auth.repository.UserRepository;
-import com.org.auth.service.AdGroupMappingService;
-import com.org.auth.service.AdLdapGroupService;
-import com.org.auth.service.AdLdapGroupService.LdapGroup;
-import com.org.auth.service.JwtService;
-import com.org.auth.utils.AuthProvider;
-import com.org.auth.utils.TokenType;
-import com.org.auth.utils.UserStatus;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,26 +33,22 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 
-import java.net.URI;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import com.org.auth.config.AdAuthProperties;
+import com.org.auth.dto.AdLoginRequestDto;
+import com.org.auth.dto.LoginResponseDto;
+import com.org.auth.entity.User;
+import com.org.auth.entity.UserGroup;
+import com.org.auth.exception.AdAuthenticationException;
+import com.org.auth.repository.UserLogRepository;
+import com.org.auth.repository.UserRepository;
+import com.org.auth.service.AdAuthService;
+import com.org.auth.service.AdGroupMappingService;
+import com.org.auth.service.AdLdapGroupService;
+import com.org.auth.service.AdLdapGroupService.LdapGroup;
+import com.org.auth.service.JwtService;
+import com.org.auth.utils.AuthProvider;
+import com.org.auth.utils.TokenType;
+import com.org.auth.utils.UserStatus;
 
 /**
  * Unit tests for {@link AdAuthService}.
@@ -113,7 +108,7 @@ class AdAuthServiceImplTest {
      * bypassing {@code @PostConstruct init()} which would hit a real JWKS URI.
      */
     private void setDecoder(JwtDecoder decoder) throws Exception {
-        var field = AdAuthServiceImpl.class.getDeclaredField("jwtDecoder");
+        var field = AdAuthService.class.getDeclaredField("jwtDecoder");
         field.setAccessible(true);
         field.set(service, decoder);
     }

@@ -40,7 +40,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AdLdapGroupService {
 
     /** Immutable descriptor for a single LDAP / AD group. */
-    record LdapGroup(String groupId, String groupName) {}
+    public record LdapGroup(String groupId, String groupName) {}
 
     private final AdAuthProperties props;
     private final LdapTemplate ldapTemplate;
