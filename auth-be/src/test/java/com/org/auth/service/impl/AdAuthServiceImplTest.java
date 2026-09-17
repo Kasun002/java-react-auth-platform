@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AdAuthService;
 
 import com.org.auth.config.AdAuthProperties;
 import com.org.auth.config.AdAuthProperties.UnmappedGroupStrategy;
@@ -55,7 +56,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link AdAuthServiceImpl}.
+ * Unit tests for {@link AdAuthService}.
  *
  * <p>The {@link JwtDecoder} is injected via a package-private field setter
  * (reflection helper in {@link #setDecoder(JwtDecoder)}) so tests can supply a
@@ -81,7 +82,7 @@ class AdAuthServiceImplTest {
     @Mock private JwtDecoder          jwtDecoder;
 
     @InjectMocks
-    private AdAuthServiceImpl service;
+    private AdAuthService service;
 
     // ── Constants ─────────────────────────────────────────────────────────────
 

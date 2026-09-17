@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AuthService;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -50,7 +51,7 @@ class AuthServiceImplChangePasswordTest {
     @Mock private PasswordPolicyService passwordPolicyService;
     @Mock private TokenBlacklistService tokenBlacklistService;
 
-    @InjectMocks private AuthServiceImpl authService;
+    @InjectMocks private AuthService authService;
 
     private static final String ACCESS_TOKEN = "valid.access.token";
 

@@ -1,42 +1,76 @@
 package com.org.auth.service;
 
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.org.auth.entity.PasswordHistory;
 import com.org.auth.entity.User;
+import com.org.auth.exception.PasswordHistoryViolationException;
+import com.org.auth.repository.PasswordHistoryRepository;
 
-/**
- * Enforces banking-grade password policy rules that go beyond simple format validation:
- * <ul>
- *   <li><b>History</b> — rejects passwords that match any of the user's last N hashes.</li>
- *   <li><b>Record</b> — persists the new password hash to history after a successful change.</li>
- * </ul>
- *
- * <p>Password complexity (length, character classes) is handled declaratively via
- * {@link com.org.auth.validation.StrongPassword} on the DTO, not here.</p>
- *
- * <p>Password age enforcement (max N days) is handled in
- * {@link impl.AuthServiceImpl} during login, not here, because it depends on
- * the user entity rather than a candidate plain-text password.</p>
- */
-public interface PasswordPolicyService {
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PasswordPolicyService {
+
+    @Value("${app.security.password.history-count:12}")
+    private int historyCount;
+
+    private final PasswordHistoryRepository passwordHistoryRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    // ── History enforcement ───────────────────────────────────────────────────
+
+    public void enforceHistory(User user, String plainPassword) {
+        List<PasswordHistory> recent = passwordHistoryRepository
+                .findRecentByUser(user, PageRequest.of(0, historyCount));
+
+        for (PasswordHistory entry : recent) {
+            if (passwordEncoder.matches(plainPassword, entry.getPasswordHash())) {
+                log.warn("Password history violation for userId=[{}]", user.getId());
+                throw new PasswordHistoryViolationException(historyCount);
+            }
+        }
+    }
+
+    // ── History recording ─────────────────────────────────────────────────────
 
     /**
-     * Checks whether {@code plainPassword} matches any of the user's recent
-     * password history.  Throws {@link com.org.auth.exception.PasswordHistoryViolationException}
-     * if a match is found.
-     *
-     * @param user          the user whose history to check
-     * @param plainPassword the candidate plain-text password (not yet encoded)
+     * Saves the encoded password to history, then prunes entries older than the
+     * configured history window so the table never grows unbounded.
      */
-    void enforceHistory(User user, String plainPassword);
+    @Transactional
+    public void recordPasswordChange(User user, String encodedPassword) {
+        PasswordHistory entry = new PasswordHistory();
+        entry.setUser(user);
+        entry.setPasswordHash(encodedPassword);
+        passwordHistoryRepository.save(entry);
+
+        pruneOldEntries(user);
+        log.debug("Password history recorded for userId=[{}]", user.getId());
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     /**
-     * Persists the encoded password hash to the user's password history and
-     * prunes entries beyond the configured history window.
-     *
-     * <p>Must be called <em>after</em> the new password has been saved to the
-     * user record so the history stays consistent.</p>
-     *
-     * @param user            the user whose history to update
-     * @param encodedPassword the BCrypt-encoded password that was just set
+     * Deletes history entries beyond the configured {@code historyCount} window,
+     * keeping only the most recent N entries for the user.
      */
-    void recordPasswordChange(User user, String encodedPassword);
+    private void pruneOldEntries(User user) {
+        List<Long> allIds = passwordHistoryRepository.findAllIdsByUserOrderByCreatedAtDesc(user);
+        if (allIds.size() > historyCount) {
+            List<Long> idsToDelete = allIds.subList(historyCount, allIds.size());
+            passwordHistoryRepository.deleteByIdIn(idsToDelete);
+            log.debug("Pruned [{}] old password history entries for userId=[{}]",
+                    idsToDelete.size(), user.getId());
+        }
+    }
 }

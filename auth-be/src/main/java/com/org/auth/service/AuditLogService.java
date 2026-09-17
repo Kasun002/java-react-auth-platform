@@ -2,35 +2,70 @@ package com.org.auth.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.org.auth.dto.AuditLogDto;
+import com.org.auth.entity.AuditLog;
+import com.org.auth.repository.AuditLogRepository;
+import com.org.auth.repository.UserRepository;
 import com.org.auth.utils.AuditStatus;
 
-public interface AuditLogService {
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
-    /**
-     * Returns a paginated, filtered view of the audit log.
-     *
-     * @param status optional status filter (null = all)
-     * @param q      optional free-text search (null / blank = no filter)
-     * @param pageable pagination + sort
-     */
-    Page<AuditLogDto> getAuditLogs(String status, String q, Pageable pageable);
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuditLogService {
 
-    /**
-     * Records a single admin action to the audit log.
-     * Prefer calling this via {@code AuditHelper.record()} which resolves the
-     * actor and IP automatically from the Spring request context.
-     *
-     * @param actorId    ID of the user who performed the action
-     * @param actorName  display name of that user (denormalised for permanence)
-     * @param action     machine-readable action code, e.g. {@code ROLE_ASSIGNED}
-     * @param resource   resource type, e.g. {@code USER}, {@code ROLE}
-     * @param resourceId identifier of the affected resource (may be null)
-     * @param details    human-readable description of what changed
-     * @param ipAddress  originating IP (PCI-DSS Req 10.2.4; may be null)
-     * @param status     outcome of the action
-     */
-    void record(Long actorId, String actorName, String action, String resource,
-                String resourceId, String details, String ipAddress, AuditStatus status);
+    private final AuditLogRepository auditLogRepository;
+    private final UserRepository userRepository;
+
+    @Transactional(readOnly = true)
+    public Page<AuditLogDto> getAuditLogs(String status, String q, Pageable pageable) {
+        AuditStatus statusEnum = StringUtils.hasText(status) ? AuditStatus.valueOf(status.toUpperCase()) : null;
+        String searchTerm = StringUtils.hasText(q) ? q.trim() : null;
+
+        return auditLogRepository
+                .findFiltered(statusEnum, searchTerm, pageable)
+                .map(this::toDto);
+    }
+
+    @Transactional
+    public void record(Long actorId, String actorName, String action, String resource,
+                       String resourceId, String details, String ipAddress, AuditStatus status) {
+        AuditLog entry = new AuditLog();
+        // getReferenceById returns a Hibernate proxy — no SQL SELECT needed
+        entry.setActor(userRepository.getReferenceById(actorId));
+        entry.setActorName(actorName);
+        entry.setAction(action);
+        entry.setResource(resource);
+        entry.setResourceId(resourceId);
+        entry.setDetails(details);
+        entry.setIpAddress(ipAddress);
+        entry.setStatus(status);
+
+        auditLogRepository.save(entry);
+        log.info("Audit: actor=[{}] action=[{}] resource=[{}] resourceId=[{}] status=[{}]",
+                actorId, action, resource, resourceId, status);
+    }
+
+    // ── Mapping ───────────────────────────────────────────────────────────────
+
+    private AuditLogDto toDto(AuditLog entry) {
+        AuditLogDto dto = new AuditLogDto();
+        dto.setId(entry.getId());
+        dto.setActorId(entry.getActor().getId());
+        dto.setActorName(entry.getActorName());
+        dto.setAction(entry.getAction());
+        dto.setResource(entry.getResource());
+        dto.setResourceId(entry.getResourceId());
+        dto.setDetails(entry.getDetails());
+        dto.setIpAddress(entry.getIpAddress());
+        dto.setStatus(entry.getStatus().name());
+        dto.setCreatedAt(entry.getCreatedAt());
+        return dto;
+    }
 }

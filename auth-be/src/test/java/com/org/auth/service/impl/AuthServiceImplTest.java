@@ -1,11 +1,12 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AuthService;
 
 import java.util.List;
 
 import com.org.auth.dto.RegisterRequestDto;
 import com.org.auth.entity.Address;
 import com.org.auth.entity.User;
-import com.org.auth.exception.EmailAlreadyExistsException;
+import com.org.auth.exception.ConflictException;
 import com.org.auth.fixtures.AddressDtoFixture;
 import com.org.auth.fixtures.RegisterRequestDtoFixture;
 import com.org.auth.repository.UserGroupRepository;
@@ -46,7 +47,7 @@ class AuthServiceImplTest {
     @Mock private PasswordEncoder       passwordEncoder;
     @Mock private OtpService            otpService;           // void mock — silently does nothing, no stub needed
     @Mock private PasswordPolicyService passwordPolicyService; // void mock — recordPasswordChange is a no-op in tests
-    @InjectMocks private AuthServiceImpl authService;
+    @InjectMocks private AuthService authService;
 
     // ── Helper ──────────────────────────────────────────────────────────────
 
@@ -209,13 +210,13 @@ class AuthServiceImplTest {
     class DuplicateEmail {
 
         @Test
-        @DisplayName("Should throw EmailAlreadyExistsException when email is already registered")
+        @DisplayName("Should throw ConflictException when email is already registered")
         void shouldThrowWhenEmailExists() {
             RegisterRequestDto request = RegisterRequestDtoFixture.valid();
             when(userRepository.existsByEmail(request.getEmail())).thenReturn(true);
 
             assertThatThrownBy(() -> authService.register(request))
-                .isInstanceOf(EmailAlreadyExistsException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining(request.getEmail());
         }
 
@@ -226,7 +227,7 @@ class AuthServiceImplTest {
             when(userRepository.existsByEmail(request.getEmail())).thenReturn(true);
 
             assertThatThrownBy(() -> authService.register(request))
-                .isInstanceOf(EmailAlreadyExistsException.class);
+                .isInstanceOf(ConflictException.class);
 
             verify(userRepository, never()).save(any());
             verify(passwordEncoder, never()).encode(anyString());

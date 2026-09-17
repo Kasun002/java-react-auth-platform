@@ -1,24 +1,52 @@
 package com.org.auth.messaging;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.org.auth.messaging.OtpEmailMessage;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
+
 /**
- * Publishes OTP email delivery requests to the message queue.
+ * SQS-backed {@link OtpEmailPublisher}.
  *
  * <p>
- * Implementations are expected to be non-blocking from the caller's perspective
- * —
- * the message is handed off to the queue and the method returns immediately,
- * decoupling the OTP generation request path from the email delivery
- * infrastructure.
+ * Serialises the message to JSON and sends it to the configured SQS queue.
+ * On failure the exception propagates to the caller; within
+ * {@code generateAndSend}'s
+ * {@code REQUIRES_NEW} transaction this rolls back the OTP record, keeping the
+ * database consistent — the user can retry via {@code /auth/resend-otp}.
  * </p>
  */
-public interface OtpEmailPublisher {
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OtpEmailPublisher {
 
-    /**
-     * Publishes an OTP email message to the configured queue.
-     *
-     * @param message the OTP email payload to enqueue
-     * @throws RuntimeException if the message cannot be published (e.g., SQS
-     *                          unavailable)
-     */
-    void publish(OtpEmailMessage message);
+    private final SqsClient sqsClient;
+    private final ObjectMapper objectMapper;
+
+    @Value("${app.messaging.otp-email-queue-url}")
+    private String queueUrl;
+
+    public void publish(OtpEmailMessage message) {
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(message);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialise OTP email message", e);
+        }
+
+        sqsClient.sendMessage(SendMessageRequest.builder()
+                .queueUrl(queueUrl)
+                .messageBody(body)
+                .build());
+
+        log.debug("OTP email queued: messageId=[{}]", message.messageId());
+    }
 }

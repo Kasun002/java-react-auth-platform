@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AuthService;
 
 import java.util.Date;
 import java.util.Optional;
@@ -45,7 +46,7 @@ class AuthServiceImplRefreshLogoutTest {
     @Mock private JwtService            jwtService;
     @Mock private TokenBlacklistService tokenBlacklistService;
 
-    @InjectMocks private AuthServiceImpl authService;
+    @InjectMocks private AuthService authService;
 
     private static final String REFRESH_TOKEN = "valid.refresh.token";
     private static final String ACCESS_TOKEN  = "valid.access.token";

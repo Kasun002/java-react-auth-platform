@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AuthService;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -56,7 +57,7 @@ class AuthServiceImplForgotResetPasswordTest {
     @Mock private StringRedisTemplate            redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
 
-    @InjectMocks private AuthServiceImpl authService;
+    @InjectMocks private AuthService authService;
 
     private User user;
 

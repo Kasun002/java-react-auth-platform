@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.TokenBlacklistService;
 
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +32,7 @@ class TokenBlacklistServiceImplTest {
     @Mock private StringRedisTemplate            redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
 
-    @InjectMocks private TokenBlacklistServiceImpl tokenBlacklistService;
+    @InjectMocks private TokenBlacklistService tokenBlacklistService;
 
     // ── Per-token blacklist — blacklist() ─────────────────────────────────────
 

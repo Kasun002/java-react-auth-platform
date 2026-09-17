@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AuthService;
 
 import java.time.LocalDateTime;
 import java.util.Date;
@@ -53,7 +54,7 @@ class AuthServiceImplLoginTest {
     @Mock private UserLogRepository userLogRepository;
     @Mock private PasswordEncoder   passwordEncoder;
     @Mock private JwtService        jwtService;
-    @InjectMocks private AuthServiceImpl authService;
+    @InjectMocks private AuthService authService;
 
     private User activeUser;
 

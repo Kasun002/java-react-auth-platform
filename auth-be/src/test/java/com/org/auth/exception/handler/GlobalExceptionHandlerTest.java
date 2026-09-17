@@ -3,7 +3,7 @@ package com.org.auth.exception.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.org.auth.dto.RegisterRequestDto;
 import com.org.auth.exception.BusinessException;
-import com.org.auth.exception.EmailAlreadyExistsException;
+import com.org.auth.exception.ConflictException;
 import com.org.auth.fixtures.RegisterRequestDtoFixture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,7 +55,7 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/probe/email-conflict")
         void throwEmailConflict() {
-            throw new EmailAlreadyExistsException("test@example.com");
+            throw new ConflictException("Email already in use: test@example.com");
         }
 
         @GetMapping("/probe/custom-business-400")
@@ -79,7 +79,7 @@ class GlobalExceptionHandlerTest {
     class BusinessExceptions {
 
         @Test
-        @DisplayName("Should return 409 CONFLICT for EmailAlreadyExistsException")
+        @DisplayName("Should return 409 CONFLICT for ConflictException")
         void shouldReturn409ForEmailConflict() throws Exception {
             mockMvc.perform(get("/probe/email-conflict"))
                 .andExpect(status().isConflict())

@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.DashboardService;
 
 import com.org.auth.dto.DashboardStatsDto;
 import com.org.auth.dto.DashboardStatsDto.CategoryPermCount;
@@ -44,7 +45,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link DashboardServiceImpl}.
+ * Unit tests for {@link DashboardService}.
  *
  * <p>Each {@code @Nested} class isolates one private builder method.
  * Repositories not under test in a given nested class are stubbed with safe
@@ -64,7 +65,7 @@ class DashboardServiceImplTest {
     @Mock private PermissionRepository permissionRepository;
     @Mock private UserLogRepository    userLogRepository;
 
-    @InjectMocks private DashboardServiceImpl service;
+    @InjectMocks private DashboardService service;
 
     // ── Entity factory helpers ────────────────────────────────────────────────
 

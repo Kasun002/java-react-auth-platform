@@ -1,44 +1,196 @@
 package com.org.auth.service;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import javax.crypto.SecretKey;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import com.org.auth.entity.Role;
 import com.org.auth.entity.User;
+import com.org.auth.entity.UserGroup;
+import com.org.auth.utils.TokenType;
 
-public interface JwtService {
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 
-    String generateAccessToken(User user);
+@Service
+public class JwtService {
 
-    String generateRefreshToken(User user);
+    private static final String ISSUER = "auth-service";
+    private static final String AUDIENCE = "shop-platform";
 
-    String extractUsername(String token);
+    @Value("${app.jwt.secret}")
+    private String secret;
 
-    Date extractExpiration(String token);
+    @Value("${app.jwt.access-token-expiry-ms}")
+    private long accessTokenExpiryMs;
 
-    /** Validates signature and expiry without requiring a known username. Used by the JWT filter. */
-    boolean isTokenValid(String token);
+    @Value("${app.jwt.refresh-token-expiry-ms}")
+    private long refreshTokenExpiryMs;
 
-    /** Validates signature, expiry, and that the subject matches the given username. */
-    boolean isTokenValid(String token, String username);
+    private SecretKey cachedSigningKey;
 
-    /** Extracts the {@code tokenType} claim (ACCESS | REFRESH). */
-    String extractTokenType(String token);
+    @PostConstruct
+    void init() {
+        cachedSigningKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    }
 
-    /** Extracts the {@code userId} claim. */
-    Long extractUserId(String token);
+    public String generateAccessToken(User user) {
+        return buildToken(user, accessTokenExpiryMs, TokenType.ACCESS);
+    }
 
-    /** Extracts the {@code permissions} claim as a list of permission codes. */
-    List<String> extractPermissions(String token);
+    public String generateRefreshToken(User user) {
+        return buildToken(user, refreshTokenExpiryMs, TokenType.REFRESH);
+    }
 
-    /** Extracts the {@code groups} claim as a list of group names. */
-    List<String> extractGroups(String token);
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
 
-    /** Extracts the {@code jti} (JWT ID) claim — used for per-token revocation. */
-    String extractJti(String token);
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
 
-    /** Extracts the {@code iat} (issued-at) claim — used for user-level session invalidation. */
-    Date extractIssuedAt(String token);
+    public boolean isTokenValid(String token) {
+        try {
+            return !isTokenExpired(token);
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
 
-    /** Extracts the {@code name} claim — used to populate the audit log actor name without a DB lookup. */
-    String extractName(String token);
+    public boolean isTokenValid(String token, String username) {
+        try {
+            return extractUsername(token).equals(username) && !isTokenExpired(token);
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public String extractTokenType(String token) {
+        return extractClaim(token, claims -> claims.get("tokenType", String.class));
+    }
+
+    public Long extractUserId(String token) {
+        return extractClaim(token, claims -> {
+            Object val = claims.get("userId");
+            if (val instanceof Long)
+                return (Long) val;
+            if (val instanceof Integer)
+                return ((Integer) val).longValue();
+            return null;
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> extractPermissions(String token) {
+        return extractClaim(token, claims -> {
+            Object val = claims.get("permissions");
+            return val instanceof List ? (List<String>) val : Collections.emptyList();
+        });
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, Claims::getId);
+    }
+
+    public Date extractIssuedAt(String token) {
+        return extractClaim(token, Claims::getIssuedAt);
+    }
+
+    public String extractName(String token) {
+        return extractClaim(token, claims -> claims.get("name", String.class));
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> extractGroups(String token) {
+        return extractClaim(token, claims -> {
+            Object val = claims.get("groups");
+            return val instanceof List ? (List<String>) val : Collections.emptyList();
+        });
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private String buildToken(User user, long expiryMs, TokenType tokenType) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + expiryMs);
+        return Jwts.builder()
+                .id(UUID.randomUUID().toString()) // jti — enables per-token revocation
+                .issuer(ISSUER) // iss — scopes token to this service
+                .audience().add(AUDIENCE).and() // aud — prevents cross-service replay
+                .subject(user.getEmail())
+                .claim("userId", user.getId())
+                .claim("name", user.getName())
+                .claim("tokenType", tokenType.name())
+                .claim("permissions", computePermissions(user))
+                .claim("groups", computeGroupNames(user))
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(cachedSigningKey)
+                .compact();
+    }
+
+    /**
+     * Computes the effective permission codes for a user by unioning:
+     * - permissions from all group-assigned roles
+     * - permissions from directly assigned roles
+     *
+     * <p>
+     * Called within the login transaction so LAZY collections are accessible.
+     * </p>
+     */
+    private List<String> computePermissions(User user) {
+        Set<String> perms = new HashSet<>();
+        for (UserGroup group : user.getGroups()) {
+            for (Role role : group.getRoles()) {
+                role.getPermissions().forEach(p -> perms.add(p.getCode()));
+            }
+        }
+        for (Role role : user.getDirectRoles()) {
+            role.getPermissions().forEach(p -> perms.add(p.getCode()));
+        }
+        return new ArrayList<>(perms);
+    }
+
+    private List<String> computeGroupNames(User user) {
+        return user.getGroups().stream()
+                .map(UserGroup::getName)
+                .collect(Collectors.toList());
+    }
+
+    private boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
+    private <T> T extractClaim(String token, Function<Claims, T> resolver) {
+        // L4: require the correct issuer on every parse so tokens from other services
+        // (even if signed with the same key) are rejected.
+        Claims claims = Jwts.parser()
+                .verifyWith(cachedSigningKey)
+                .requireIssuer(ISSUER)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        // L4: validate audience manually — JJWT 0.12.x stores aud as Set<String>.
+        Set<String> audience = claims.getAudience();
+        if (audience == null || !audience.contains(AUDIENCE)) {
+            throw new JwtException("Token audience is not trusted");
+        }
+        return resolver.apply(claims);
+    }
 }

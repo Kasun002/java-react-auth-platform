@@ -11,7 +11,7 @@ import com.org.auth.dto.UserDto;
 import com.org.auth.dto.ResendOtpRequestDto;
 import com.org.auth.dto.VerifyOtpRequestDto;
 import com.org.auth.exception.AccountLockedException;
-import com.org.auth.exception.EmailAlreadyExistsException;
+import com.org.auth.exception.ConflictException;
 import com.org.auth.exception.InvalidCredentialsException;
 import com.org.auth.exception.OtpExpiredException;
 import com.org.auth.exception.OtpInvalidException;
@@ -214,7 +214,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("Should return 409 CONFLICT when email is already registered")
         void shouldReturn409WhenEmailAlreadyExists() throws Exception {
-            doThrow(new EmailAlreadyExistsException("john.doe@example.com"))
+            doThrow(new ConflictException("john.doe@example.com"))
                 .when(authService).register(any());
 
             mockMvc.perform(post(REGISTER_URL)

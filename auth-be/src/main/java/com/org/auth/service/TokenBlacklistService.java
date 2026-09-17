@@ -1,42 +1,84 @@
 package com.org.auth.service;
 
-public interface TokenBlacklistService {
+import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 
-    /**
-     * Adds the given JWT ID to the blacklist with the specified TTL.
-     * The entry expires automatically when the original token would have expired.
-     *
-     * @param jti        the JWT ID claim from the token
-     * @param ttlSeconds remaining lifetime of the token in seconds
-     */
-    void blacklist(String jti, long ttlSeconds);
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 
-    /**
-     * Returns {@code true} if the given JWT ID has been blacklisted (revoked).
-     *
-     * @param jti the JWT ID claim to check
-     */
-    boolean isBlacklisted(String jti);
 
-    /**
-     * Records a user-level session invalidation event. Any token issued before
-     * this moment for the given user will be rejected by the filter.
-     *
-     * <p>Used on password change, account suspension, and admin-forced logout.
-     * The entry expires automatically after {@code ttlSeconds} so Redis never
-     * holds stale entries beyond the maximum token lifetime.</p>
-     *
-     * @param userId     the user whose tokens should be invalidated
-     * @param ttlSeconds TTL matching the longest-lived token type (refresh token expiry)
-     */
-    void invalidateAllUserTokens(Long userId, long ttlSeconds);
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
-    /**
-     * Returns {@code true} if the token was issued before the user's last
-     * global invalidation event (password change, suspension, etc.).
-     *
-     * @param userId        the user who owns the token
-     * @param tokenIssuedAt the {@code iat} claim from the token as an {@link java.time.Instant}
-     */
-    boolean isUserTokensInvalidated(Long userId, java.time.Instant tokenIssuedAt);
+/**
+ * Redis-backed token revocation store.
+ *
+ * <p>
+ * Two revocation mechanisms:
+ * </p>
+ * <ol>
+ * <li><b>Per-token blacklist</b> — key {@code blacklist:jti:<jti>}, value
+ * {@code "1"}, TTL = remaining token lifetime.
+ * Used for individual logout and refresh token rotation.</li>
+ * <li><b>User-level invalidation</b> — key
+ * {@code user:tokens:invalidated:<userId>}, value = epoch seconds of
+ * invalidation,
+ * TTL = refresh token lifetime. Used on password change, account suspension,
+ * and admin-forced logout.
+ * Any token whose {@code iat} is older than this timestamp is rejected.</li>
+ * </ol>
+ *
+ * <p>
+ * All Redis operations are O(1) — negligible per-request overhead.
+ * </p>
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class TokenBlacklistService {
+
+    private static final String JTI_PREFIX = "blacklist:jti:";
+    private static final String USER_PREFIX = "user:tokens:invalidated:";
+
+    private final StringRedisTemplate redisTemplate;
+
+    // ── Per-token revocation ──────────────────────────────────────────────────
+
+    public void blacklist(String jti, long ttlSeconds) {
+        if (ttlSeconds <= 0) {
+            log.debug("Token jti=[{}] already expired — skipping blacklist entry", jti);
+            return;
+        }
+        redisTemplate.opsForValue().set(JTI_PREFIX + jti, "1", ttlSeconds, TimeUnit.SECONDS);
+        log.debug("Token blacklisted: jti=[{}] ttl=[{}s]", jti, ttlSeconds);
+    }
+
+    public boolean isBlacklisted(String jti) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(JTI_PREFIX + jti));
+    }
+
+    // ── User-level revocation ─────────────────────────────────────────────────
+
+    public void invalidateAllUserTokens(Long userId, long ttlSeconds) {
+        if (ttlSeconds <= 0)
+            return;
+        String epochNow = String.valueOf(Instant.now().getEpochSecond());
+        redisTemplate.opsForValue().set(USER_PREFIX + userId, epochNow, ttlSeconds, TimeUnit.SECONDS);
+        log.debug("All tokens invalidated for userId=[{}] ttl=[{}s]", userId, ttlSeconds);
+    }
+
+    public boolean isUserTokensInvalidated(Long userId, Instant tokenIssuedAt) {
+        String raw = redisTemplate.opsForValue().get(USER_PREFIX + userId);
+        if (raw == null)
+            return false;
+        long invalidatedAtEpoch;
+        try {
+            invalidatedAtEpoch = Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            log.error("Corrupt user invalidation record for userId=[{}] value=[{}] — treating as not invalidated",
+                    userId, raw);
+            return false;
+        }
+        return tokenIssuedAt.getEpochSecond() < invalidatedAtEpoch;
+    }
 }

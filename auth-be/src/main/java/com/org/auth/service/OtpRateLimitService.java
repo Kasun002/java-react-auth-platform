@@ -1,17 +1,54 @@
 package com.org.auth.service;
 
-public interface OtpRateLimitService {
+import java.util.concurrent.TimeUnit;
 
-    /**
-     * Atomically increments the OTP resend counter for the given user and checks
-     * whether the new count is within the allowed limit.
-     *
-     * <p>The counter key expires after one hour from the first increment in the window,
-     * at which point the window resets automatically.</p>
-     *
-     * @param userId     the user whose resend counter to increment
-     * @param maxPerHour the maximum number of resends allowed per hour
-     * @return {@code true} if the resend is permitted; {@code false} if the limit is exceeded
-     */
-    boolean checkAndIncrementResend(Long userId, int maxPerHour);
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Redis-backed OTP resend rate limiter using atomic INCR + EXPIRE.
+ *
+ * <p>
+ * Key format: {@code otp:resend:<userId>}.
+ * The key is created on the first resend and expires 1 hour later, resetting
+ * the window.
+ * </p>
+ *
+ * <p>
+ * INCR is atomic — no race condition between the increment and the limit check.
+ * If the incremented value exceeds the cap, the resend is rejected (the counter
+ * continues to accumulate, which is intentional: further attempts within the
+ * window
+ * remain blocked).
+ * </p>
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class OtpRateLimitService {
+
+    private static final String PREFIX = "otp:resend:";
+
+    private final StringRedisTemplate redisTemplate;
+
+    public boolean checkAndIncrementResend(Long userId, int maxPerHour) {
+        String key = PREFIX + userId;
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count == null) {
+            log.warn("Redis INCR returned null for key=[{}] — blocking resend (fail-secure)", key);
+            return false;
+        }
+        if (count == 1L) {
+            // First resend in this window — set the 1-hour expiry
+            redisTemplate.expire(key, 1, TimeUnit.HOURS);
+        }
+        boolean allowed = count <= maxPerHour;
+        log.debug("OTP resend rate check: userId=[{}] count=[{}] max=[{}] allowed=[{}]",
+                userId, count, maxPerHour, allowed);
+        return allowed;
+    }
 }

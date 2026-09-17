@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.LoginRateLimitService;
 
 import java.util.concurrent.TimeUnit;
 
@@ -32,7 +33,7 @@ class LoginRateLimitServiceImplTest {
     @Mock private StringRedisTemplate            redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
 
-    @InjectMocks private LoginRateLimitServiceImpl rateLimitService;
+    @InjectMocks private LoginRateLimitService rateLimitService;
 
     @BeforeEach
     void setUp() {

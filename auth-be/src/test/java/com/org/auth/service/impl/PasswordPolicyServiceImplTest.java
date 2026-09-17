@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.PasswordPolicyService;
 
 import java.util.List;
 
@@ -37,7 +38,7 @@ class PasswordPolicyServiceImplTest {
     @Mock private PasswordHistoryRepository passwordHistoryRepository;
     @Mock private PasswordEncoder           passwordEncoder;
 
-    @InjectMocks private PasswordPolicyServiceImpl passwordPolicyService;
+    @InjectMocks private PasswordPolicyService passwordPolicyService;
 
     private User user;
 

@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.OtpService;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -49,7 +50,7 @@ class OtpServiceImplTest {
     @Mock private UserRepository            userRepository;
     @Mock private OtpEmailPublisher         otpEmailPublisher;
     @Mock private OtpRateLimitService       otpRateLimitService;
-    @InjectMocks private OtpServiceImpl otpService;
+    @InjectMocks private OtpService otpService;
 
     private User newUser;
 

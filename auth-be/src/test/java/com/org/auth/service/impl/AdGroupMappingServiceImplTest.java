@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.AdGroupMappingService;
 
 import com.org.auth.config.AdAuthProperties;
 import com.org.auth.config.AdAuthProperties.UnmappedGroupStrategy;
@@ -40,7 +41,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link AdGroupMappingServiceImpl}.
+ * Unit tests for {@link AdGroupMappingService}.
  *
  * <p>Covers:
  * <ul>
@@ -61,7 +62,7 @@ class AdGroupMappingServiceImplTest {
     @Mock private AdGroupMappingRepository adGroupMappingRepository;
     @Mock private UserGroupRepository      userGroupRepository;
 
-    @InjectMocks private AdGroupMappingServiceImpl service;
+    @InjectMocks private AdGroupMappingService service;
 
     // ── Entity / DTO helpers ──────────────────────────────────────────────────
 

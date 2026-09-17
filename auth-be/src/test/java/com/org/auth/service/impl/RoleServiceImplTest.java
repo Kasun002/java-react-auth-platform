@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.RoleService;
 
 import java.util.HashSet;
 import java.util.List;
@@ -40,7 +41,7 @@ class RoleServiceImplTest {
     @Mock private PermissionRepository permissionRepository;
     @Mock private AuditHelper          auditHelper;
 
-    @InjectMocks private RoleServiceImpl service;
+    @InjectMocks private RoleService service;
 
     private Role       managerRole;
     private Permission userView;

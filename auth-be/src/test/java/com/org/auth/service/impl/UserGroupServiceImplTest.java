@@ -1,4 +1,5 @@
 package com.org.auth.service.impl;
+import com.org.auth.service.UserGroupService;
 
 import java.util.HashSet;
 import java.util.List;
@@ -44,7 +45,7 @@ class UserGroupServiceImplTest {
     @Mock private UserRepository      userRepository;
     @Mock private AuditHelper         auditHelper;
 
-    @InjectMocks private UserGroupServiceImpl service;
+    @InjectMocks private UserGroupService service;
 
     private UserGroup adminGroup;
     private Role      managerRole;
